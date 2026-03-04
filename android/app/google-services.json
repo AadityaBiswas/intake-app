@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1059808684784",
+    "project_id": "intake-protein",
+    "storage_bucket": "intake-protein.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1059808684784:android:ad699e30e6078122717035",
+        "android_client_info": {
+          "package_name": "com.example.intake"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDn2VbauqF8bRepdS_01XQWQNCCEIhjrwk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

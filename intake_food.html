@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Light Mode Notebook Intake Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200..800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#22C55E",
+                        "macro-protein": "#22C55E",
+                        "macro-carbs": "#f59e0b",
+                        "macro-fats": "#ef4444",
+                        "macro-cals": "#94a3b8",
+                        "background-light": "#F6F7F9",
+                        "text-primary": "#0F172A",
+                        "text-secondary": "#64748B",
+                        "notebook-bg": "#F6F7F9",
+                    },
+                    fontFamily: {
+                        "display": ["Manrope", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "2xl": "2rem",
+                        "3xl": "2.5rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        body {
+            font-family: 'Manrope', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            min-height: 100dvh;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .notebook-input:focus {
+            outline: none;
+        }
+    </style>
+<style>
+        body {
+            min-height: max(884px, 100dvh);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light text-slate-900 overflow-hidden">
+<main class="w-full max-w-md mx-auto relative flex flex-col h-screen overflow-hidden bg-notebook-bg">
+<header class="pt-6 px-6 pb-2 flex items-end justify-between bg-notebook-bg z-30 shrink-0">
+<div>
+<h2 class="text-[10px] font-bold text-primary uppercase tracking-[0.2em] mb-1">Today</h2>
+<h1 class="text-3xl font-semibold tracking-tight text-text-primary">Hi Aaditya</h1>
+</div>
+</header>
+<div class="flex flex-col grow overflow-y-auto no-scrollbar relative z-10">
+<section class="w-full shrink-0 sticky top-0 z-20 px-6 pt-2 pb-6 pointer-events-none">
+<div class="bg-white rounded-[2rem] p-5 py-3.5 shadow-xl shadow-slate-200/50 border border-slate-100 pointer-events-auto">
+<div class="mb-2.5">
+<div class="flex items-baseline justify-between mb-1.5">
+<div class="flex items-baseline gap-1.5">
+<span class="text-5xl font-extrabold text-primary tracking-tighter leading-none">124</span>
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Protein</span>
+</div>
+<div class="text-[10px] font-bold text-slate-400 uppercase tracking-tight">/ 160</div>
+</div>
+<div class="w-full h-1 bg-slate-50 rounded-full overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 78%"></div>
+</div>
+</div>
+<div class="flex justify-between items-center py-1.5 border-t border-slate-100">
+<div class="flex-1 text-center">
+<span class="block text-[8px] text-slate-400 font-bold uppercase tracking-widest mb-0.5">Carbs</span>
+<span class="text-sm font-bold text-slate-800">142<span class="text-[8px] font-medium opacity-50 ml-0.5">g</span></span>
+</div>
+<div class="h-5 w-px bg-slate-100"></div>
+<div class="flex-1 text-center">
+<span class="block text-[8px] text-slate-400 font-bold uppercase tracking-widest mb-0.5">Fats</span>
+<span class="text-sm font-bold text-slate-800">54<span class="text-[8px] font-medium opacity-50 ml-0.5">g</span></span>
+</div>
+<div class="flex-[1.2] flex items-center bg-slate-50 rounded-xl px-1">
+<div class="flex-1 text-center py-1">
+<span class="block text-[8px] text-slate-400 font-bold uppercase tracking-widest mb-0.5">Cals</span>
+<span class="text-sm font-bold text-slate-800">1,450</span>
+</div>
+<div class="h-6 w-px bg-slate-200 mx-0.5"></div>
+<div class="flex-1 text-center py-1">
+<span class="block text-[8px] text-slate-400 font-bold uppercase tracking-widest mb-0.5">Goal</span>
+<span class="text-sm font-bold text-slate-800">2,100</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="flex flex-col grow px-8 pb-32 pt-2 space-y-8">
+<div class="flex items-center justify-between group">
+<span class="text-text-primary font-medium text-lg font-display tracking-tight text-left">Greek Yogurt &amp; Berries</span>
+<div class="flex items-center gap-2">
+<div class="w-1.5 h-1.5 rounded-full bg-[#22C55E] shrink-0 mt-[1px]"></div>
+<span class="text-base text-text-secondary font-medium">220 cal</span>
+</div>
+</div>
+<div class="flex items-center justify-between group">
+<span class="text-text-primary font-medium text-lg font-display tracking-tight text-left">Black Coffee</span>
+<div class="flex items-center gap-2">
+<span class="text-base text-text-secondary font-medium">2 cal</span>
+</div>
+</div>
+<div class="flex items-center justify-between group">
+<span class="text-text-primary font-medium text-lg font-display tracking-tight text-left">Chicken Curry</span>
+<div class="flex items-center gap-2">
+<div class="w-1.5 h-1.5 rounded-full bg-[#22C55E] shrink-0 mt-[1px]"></div>
+<span class="text-base text-text-secondary font-medium">450 cal</span>
+</div>
+</div>
+<div class="flex items-center justify-between group">
+<span class="text-text-primary font-medium text-lg font-display tracking-tight text-left">Yellow Dal</span>
+<div class="flex items-center gap-2">
+<span class="text-base text-text-secondary font-medium">180 cal</span>
+</div>
+</div>
+<div class="flex items-center pt-2 relative">
+<div class="relative w-full">
+<input autofocus="" class="w-full bg-transparent border-none p-0 text-lg font-medium text-text-primary placeholder:text-slate-400 focus:ring-0 notebook-input font-display tracking-tight" placeholder="Type food..." type="text"/>
+<style>
+                            input.notebook-input {
+                                caret-color: #22C55E;
+                            }
+                        </style>
+</div>
+</div>
+<div class="h-20"></div>
+</section>
+</div>
+<div class="absolute inset-0 z-40 bg-slate-900/20 backdrop-blur-[1px] transition-opacity"></div>
+<div class="absolute bottom-0 left-0 right-0 z-50 bg-white rounded-t-[32px] shadow-[0_-8px_30px_rgba(0,0,0,0.08)] transform transition-transform duration-300 ease-out flex flex-col max-h-[90vh]">
+<div class="w-full flex justify-center pt-3 pb-2">
+<div class="w-12 h-1.5 bg-slate-200 rounded-full"></div>
+</div>
+<div class="px-6 pb-8 pt-2 overflow-y-auto no-scrollbar">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h2 class="text-[22px] font-semibold text-text-primary tracking-tight leading-snug">Chicken Curry</h2>
+<p class="text-sm text-slate-500 font-medium mt-0.5">Lunch • 1:15 PM</p>
+</div>
+<button class="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:text-slate-600 hover:bg-slate-200 transition-colors">
+<span class="material-symbols-outlined text-[20px]">close</span>
+</button>
+</div>
+<div class="py-6 border-t border-slate-100">
+<div class="flex items-end justify-between">
+<div class="flex flex-col">
+<span class="text-[10px] font-bold text-primary uppercase tracking-[0.2em] mb-1">Protein</span>
+<span class="text-6xl font-extrabold text-primary tracking-tighter leading-none -mt-1.5">32g</span>
+</div>
+<div class="flex flex-col items-end gap-1">
+<div class="flex items-baseline gap-2">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right w-16">Carbs</span>
+<span class="text-lg font-bold text-slate-800 tabular-nums w-14 text-right">45g</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right w-16">Fats</span>
+<span class="text-lg font-bold text-slate-800 tabular-nums w-14 text-right">18g</span>
+</div>
+<div class="flex items-baseline gap-2">
+<span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right w-16">Calories</span>
+<span class="text-lg font-bold text-slate-800 tabular-nums w-14 text-right">450</span>
+</div>
+</div>
+</div>
+</div>
+<div class="py-5 border-t border-slate-100 mb-6">
+<label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Quantity</label>
+<div class="flex items-center gap-3">
+<div class="relative flex-1">
+<input class="w-full bg-slate-50 border-none rounded-2xl py-3 px-4 text-lg font-bold text-slate-900 focus:ring-2 focus:ring-primary/20 focus:bg-white transition-all outline-none" type="number" value="1.5"/>
+</div>
+<div class="relative bg-slate-50 rounded-2xl px-5 py-3 border-none shrink-0 cursor-pointer hover:bg-slate-100 group">
+<select class="absolute inset-0 w-full h-full opacity-0 cursor-pointer appearance-none z-10">
+<option value="grams">grams</option>
+<option value="servings">servings</option>
+<option value="oz">oz</option>
+<option value="cups">cups</option>
+</select>
+<div class="flex items-center gap-1">
+<span class="text-slate-500 font-semibold">grams</span>
+<span class="material-symbols-outlined text-[16px] text-slate-400">expand_more</span>
+</div>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<button class="flex items-center justify-center py-4 px-4 rounded-xl bg-white border border-slate-200 shadow-sm text-slate-700 font-bold text-sm hover:bg-slate-50 transition-all active:scale-[0.98]">
+                        Edit
+                    </button>
+<button class="flex items-center justify-center py-4 px-4 rounded-xl bg-red-50 border border-red-100 shadow-sm text-red-600 font-bold text-sm hover:bg-red-100 transition-all active:scale-[0.98]">
+                        Delete
+                    </button>
+</div>
+<div class="h-4"></div>
+</div>
+</div>
+</main>
+</body></html>
