@@ -109,6 +109,16 @@ class AiFoodService {
               .toList()
           : <String>['AI estimation'];
 
+      // Parse optional unit metadata returned by the Cloud Function
+      final defaultUnit = data['defaultUnit'] as String?;
+      final rawValidUnits = data['validUnits'];
+      final validUnits = rawValidUnits is List
+          ? rawValidUnits
+              .map((u) => u.toString())
+              .where((u) => u.isNotEmpty)
+              .toList()
+          : null;
+
       final food = Food(
         id: '',
         name: normalizedName,
@@ -123,6 +133,8 @@ class AiFoodService {
         defaultServingGrams: defaultServing ?? 100,
         source: 'ai',
         credibilityScore: confidence,
+        preferredUnit: defaultUnit,
+        validUnits: validUnits,
       );
 
       return AiFoodResult(

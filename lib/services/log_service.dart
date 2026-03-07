@@ -40,13 +40,10 @@ class LogService {
   Future<void> logFood(DateTime date, LoggedFoodEntry entry) async {
     final user = _auth.currentUser;
     if (user != null) {
-      // Ensure the parent user document exists so it shows in the Firestore console explicitly
-      await _firestore.collection('users').doc(user.uid).set({
-        'name': user.displayName ?? 'Unknown',
-        'email': user.email ?? '',
-        'phone': user.phoneNumber ?? '',
+      // Fire-and-forget: profile data is written during onboarding; only refresh last_active
+      _firestore.collection('users').doc(user.uid).update({
         'last_active': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      });
     }
 
     final ref = _logsRef(date).doc(); // auto-ID

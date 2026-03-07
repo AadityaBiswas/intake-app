@@ -79,9 +79,28 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
 
     _gramsUsed = widget.nutrition.gramsUsed;
 
-    _quantityController = TextEditingController(
-      text: _gramsUsed.round().toString(),
-    );
+    // Smart initialisation: when the food has a preferred unit (e.g. "piece"),
+    // display the quantity in that unit rather than raw grams.
+    final preferred = widget.food.preferredUnit;
+    final gramsPerPreferred = preferred != null
+        ? (ScalingEngine.unitToGrams[preferred] ?? widget.food.defaultServingGrams)
+        : null;
+
+    if (preferred != null &&
+        preferred != 'g' &&
+        gramsPerPreferred != null &&
+        gramsPerPreferred > 0) {
+      _selectedUnit = preferred;
+      final displayQty = _gramsUsed / gramsPerPreferred;
+      _quantityController = TextEditingController(
+        text: displayQty.round().toString(),
+      );
+    } else {
+      _selectedUnit = 'g';
+      _quantityController = TextEditingController(
+        text: _gramsUsed.round().toString(),
+      );
+    }
     _quantityController.addListener(_onQuantityChanged);
   }
 
@@ -144,7 +163,10 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
   };
 
   void _showUnitPicker() {
-    final curatedUnits = ['g', 'ml', 'bowl', 'cup', 'plate', 'piece', 'tbsp', 'tsp', 'slice', 'serving'];
+    const allUnits = ['g', 'ml', 'bowl', 'cup', 'plate', 'piece', 'tbsp', 'tsp', 'slice', 'serving'];
+    final curatedUnits = (widget.food.validUnits?.isNotEmpty == true)
+        ? widget.food.validUnits!
+        : allUnits;
 
     showModalBottomSheet(
       context: context,
@@ -565,44 +587,14 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
   Widget _buildThoughtProcessSection() {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFF1F5F9)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'THOUGHT PROCESS',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF94A3B8),
-                letterSpacing: 1.2,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              widget.thoughtProcess!,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF475569),
-                height: 1.5,
-              ),
-            ),
-          ],
-        ),
-      ),
+      child: _ThoughtProcessCard(text: widget.thoughtProcess!),
     );
   }
 
   // ─── Sources ──────────────────────────────────────────────────────
 
   Widget _buildSourcesSection() {
+    final sources = widget.sources!;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Container(
@@ -615,25 +607,55 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'SOURCES',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF94A3B8),
-                letterSpacing: 1.2,
-              ),
+            // Header
+            Row(
+              children: [
+                Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Icon(
+                    Icons.travel_explore_rounded,
+                    size: 13,
+                    color: Color(0xFF64748B),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'SOURCES',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF94A3B8),
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '${sources.length} reference${sources.length == 1 ? '' : 's'}',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFFB0B8C4),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 10),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: widget.sources!
-                    .map((source) => _SourcePill(source: source))
-                    .toList(),
-              ),
-            ),
+            const SizedBox(height: 4),
+            // Source list
+            ...sources.asMap().entries.map((entry) {
+              final isLast = entry.key == sources.length - 1;
+              return Column(
+                children: [
+                  _SourceRow(source: entry.value),
+                  if (!isLast)
+                    const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9)),
+                ],
+              );
+            }),
           ],
         ),
       ),
@@ -641,26 +663,135 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
   }
 }
 
-// ─── Source Pill ──────────────────────────────────────────────────
+// ─── Thought Process Card (collapsible) ──────────────────────────
 
-class _SourcePill extends StatefulWidget {
-  final String source;
-  const _SourcePill({required this.source});
+class _ThoughtProcessCard extends StatefulWidget {
+  final String text;
+  const _ThoughtProcessCard({required this.text});
 
   @override
-  State<_SourcePill> createState() => _SourcePillState();
+  State<_ThoughtProcessCard> createState() => _ThoughtProcessCardState();
 }
 
-class _SourcePillState extends State<_SourcePill> {
+class _ThoughtProcessCardState extends State<_ThoughtProcessCard> {
   bool _expanded = false;
 
+  // Only show collapse toggle if the text is long enough to need it
+  static const int _threshold = 160;
+  bool get _isLong => widget.text.length > _threshold;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFF1F5F9)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row
+          Row(
+            children: [
+              Container(
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 13,
+                  color: Color(0xFF22C55E),
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'AI REASONING',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF94A3B8),
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Body text (collapsible)
+          AnimatedCrossFade(
+            firstChild: Text(
+              widget.text,
+              maxLines: 4,
+              overflow: TextOverflow.fade,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF475569),
+                height: 1.55,
+              ),
+            ),
+            secondChild: Text(
+              widget.text,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF475569),
+                height: 1.55,
+              ),
+            ),
+            crossFadeState:
+                _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 250),
+          ),
+          // Toggle button (only when text is long)
+          if (_isLong) ...[
+            const SizedBox(height: 10),
+            GestureDetector(
+              onTap: () => setState(() => _expanded = !_expanded),
+              behavior: HitTestBehavior.opaque,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _expanded ? 'Show less' : 'Read more',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF22C55E),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 250),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 16,
+                      color: Color(0xFF22C55E),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Source Row ───────────────────────────────────────────────────
+
+class _SourceRow extends StatelessWidget {
+  final String source;
+  const _SourceRow({required this.source});
+
   String get _faviconUrl {
-    // Attempt to extract a domain name from the source string.
-    // E.g., "USDA FoodData Central" -> "fdc.nal.usda.gov" (fallback)
-    // "nutritionvalue.org" -> "nutritionvalue.org"
-    String domain = widget.source.toLowerCase();
-    
-    // Some hardcoded mappings for common AI sources to get accurate favicons
+    String domain = source.toLowerCase();
     if (domain.contains('usda') || domain.contains('fooddata')) {
       domain = 'fdc.nal.usda.gov';
     } else if (domain.contains('calorieking')) {
@@ -672,75 +803,50 @@ class _SourcePillState extends State<_SourcePill> {
     } else if (domain.contains('nin') || domain.contains('indian food composition')) {
       domain = 'nin.res.in';
     } else {
-      // Just extract the first word that looks like a domain if any exists
       final match = RegExp(r'[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}').firstMatch(domain);
-      if (match != null) {
-        domain = match.group(0)!;
-      } else {
-        // Fallback generic domain if nothing else matches so it gets a default globe icon from Google
-        domain = 'example.com';
-      }
+      domain = match != null ? match.group(0)! : 'example.com';
     }
-
     return 'https://www.google.com/s2/favicons?domain=$domain&sz=64';
   }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => setState(() => _expanded = !_expanded),
-      child: AnimatedSize(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-        alignment: Alignment.centerLeft,
-        child: Container(
-          margin: const EdgeInsets.only(right: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.circular(20),
-          ),
-          constraints: BoxConstraints(
-            maxWidth: _expanded ? MediaQuery.of(context).size.width - 80 : 160,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: _expanded ? CrossAxisAlignment.start : CrossAxisAlignment.center,
-            children: [
-              Container(
-                width: 16,
-                height: 16,
-                margin: EdgeInsets.only(top: _expanded ? 2 : 0),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(4),
-                  color: Colors.white,
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Image.network(
-                  _faviconUrl,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) =>
-                      const Icon(Icons.language, size: 14, color: Color(0xFF94A3B8)),
-                ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          Container(
+            width: 26,
+            height: 26,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(7),
+              color: const Color(0xFFF8FAFC),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Image.network(
+              _faviconUrl,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.language_rounded,
+                size: 15,
+                color: Color(0xFF94A3B8),
               ),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  widget.source,
-                  maxLines: _expanded ? null : 1,
-                  overflow: _expanded ? null : TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF475569),
-                    height: 1.4,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              source,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF334155),
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

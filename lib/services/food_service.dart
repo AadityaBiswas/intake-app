@@ -114,7 +114,7 @@ class FoodService {
       final nutrition = ScalingEngine.scale(
         firestoreFood.nutritionPer100g,
         quantity: parsed.quantity,
-        unit: parsed.unit,
+        unit: _resolveUnit(parsed.unit, firestoreFood),
         defaultServingGrams: firestoreFood.defaultServingGrams,
       );
       return ResolvedFood(
@@ -134,7 +134,7 @@ class FoodService {
       final nutrition = ScalingEngine.scale(
         usdaFood.nutritionPer100g,
         quantity: parsed.quantity,
-        unit: parsed.unit,
+        unit: _resolveUnit(parsed.unit, usdaFood),
         defaultServingGrams: usdaFood.defaultServingGrams,
       );
       return ResolvedFood(
@@ -157,7 +157,7 @@ class FoodService {
         final nutrition = ScalingEngine.scale(
           existing.nutritionPer100g,
           quantity: parsed.quantity,
-          unit: parsed.unit,
+          unit: _resolveUnit(parsed.unit, existing),
           defaultServingGrams: existing.defaultServingGrams,
         );
         return ResolvedFood(
@@ -174,7 +174,7 @@ class FoodService {
       final nutrition = ScalingEngine.scale(
         storedFood.nutritionPer100g,
         quantity: parsed.quantity,
-        unit: parsed.unit,
+        unit: _resolveUnit(parsed.unit, storedFood),
         defaultServingGrams: storedFood.defaultServingGrams,
       );
       return ResolvedFood(
@@ -291,17 +291,75 @@ class FoodService {
     }
   }
 
-  /// Checks if a USDA result description is relevant to the query.
+  /// USDA descriptor tokens that are never counted as "extra food tokens"
+  /// when performing the bidirectional relevance check below.
+  static const Set<String> _usdaModifiers = {
+    // Cooking methods
+    'raw', 'cooked', 'grilled', 'baked', 'boiled', 'steamed', 'roasted',
+    'fried', 'smoked', 'dried', 'canned', 'frozen', 'dehydrated', 'pickled',
+    'heated', 'breaded', 'seasoned', 'flavored',
+    // Quality
+    'organic', 'natural', 'pure', 'enriched', 'unenriched', 'fortified',
+    'plain', 'regular', 'instant',
+    // Fat level
+    'lean', 'nonfat', 'light', 'whole', 'skim',
+    // Grain / colour
+    'white', 'brown', 'wild', 'grain', 'long', 'short', 'medium',
+    // Processing
+    'ground', 'sliced', 'diced', 'chopped', 'minced', 'pureed', 'mashed',
+    'shredded', 'grated', 'peeled', 'skinless', 'boneless', 'trimmed',
+    'flaked', 'rolled', 'powdered',
+    // Animal qualifiers
+    'broiler', 'fryer', 'roaster', 'fryers', 'hen', 'capon',
+    // Body-part / portion words
+    'meat', 'skin', 'bone', 'flesh', 'only',
+    // Texture
+    'smooth', 'chunky', 'creamy', 'crispy', 'crunchy', 'thick', 'thin',
+    // Filler / function words
+    'with', 'without', 'and', 'or', 'of', 'in', 'no', 'not', 'added',
+    'salt', 'the', 'a', 'an', 'ns', 'nfs', 'type', 'style', 'form',
+    'grade', 'salted', 'unsalted', 'sweetened', 'unsweetened', 'fresh',
+    'large', 'small', 'extra', 'mini', 'jumbo',
+  };
+
+  /// Bidirectional relevance check for USDA results.
+  ///
+  /// **Forward**: every query token must appear in the description.
+  /// **Reverse**: the description must not contain extra *food-type* tokens
+  /// beyond what the query covers. Modifier words (cooking methods, colours,
+  /// etc.) are on an allowlist and never count as extra food tokens.
+  ///
+  /// Tolerance: `maxExtra = (queryTokenLength - 1).clamp(0, 2)` so that
+  /// single-word queries allow 0 extra food tokens and multi-word queries
+  /// allow a small number of USDA-style qualifiers.
   bool _isRelevant(String query, String description) {
     final queryTokens = query
         .toLowerCase()
-        .split(RegExp(r'\s+'))
+        .split(RegExp(r'[\s,.\-()/]+'))
         .where((t) => t.length > 1)
-        .toList();
+        .toSet();
     if (queryTokens.isEmpty) return false;
 
-    final descLower = description.toLowerCase();
-    return queryTokens.every((t) => descLower.contains(t));
+    final descTokens = description
+        .toLowerCase()
+        .split(RegExp(r'[\s,.\-()/]+'))
+        .where((t) => t.isNotEmpty)
+        .toSet();
+
+    // Forward check: every query token must appear in the description
+    if (!queryTokens.every((t) => descTokens.contains(t))) return false;
+
+    // Reverse check: count description tokens that are neither in the query
+    // nor in the modifier allowlist — these are genuine "extra food words"
+    final extraFoodTokens = descTokens
+        .where((t) =>
+            t.length > 1 &&
+            !queryTokens.contains(t) &&
+            !_usdaModifiers.contains(t))
+        .toSet();
+
+    final maxExtra = (queryTokens.length - 1).clamp(0, 2);
+    return extraFoodTokens.length <= maxExtra;
   }
 
   /// Extracts nutrition per 100g from a USDA food entry.
@@ -348,6 +406,20 @@ class FoodService {
     await docRef.set(food.toFirestore(), SetOptions(merge: true));
 
     return food.copyWith(id: docId);
+  }
+
+  // ─── Unit Resolution ──────────────────────────────────────────────
+
+  /// Returns the effective unit to use when scaling nutrition.
+  ///
+  /// If the user typed an explicit unit (anything except the 'serving'
+  /// fallback), that unit is always honoured. Otherwise the food's own
+  /// [Food.preferredUnit] is used so that, e.g., "puri" scales by piece
+  /// (50 g) instead of the generic serving (100 g).
+  String _resolveUnit(String? parsedUnit, Food food) {
+    if (parsedUnit != null && parsedUnit != 'serving') return parsedUnit;
+    if (food.preferredUnit != null) return food.preferredUnit!;
+    return parsedUnit ?? 'serving';
   }
 
   // ─── Aliasing System ──────────────────────────────────────────────

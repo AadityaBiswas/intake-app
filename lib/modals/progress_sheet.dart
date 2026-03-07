@@ -59,6 +59,9 @@ class _ProgressSheetState extends State<ProgressSheet> {
     _loadMonthData();
   }
 
+  String _dateKey(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
   Future<void> _loadMonthData() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
@@ -68,35 +71,34 @@ class _ProgressSheetState extends State<ProgressSheet> {
         .doc(uid)
         .collection('daily_logs');
 
-    // Single query: get all daily_log docs for this month
-    final monthStart =
-        '${_displayMonth.year}-${_displayMonth.month.toString().padLeft(2, '0')}-01';
     final daysInMonth =
         DateTime(_displayMonth.year, _displayMonth.month + 1, 0).day;
+    final monthStart =
+        '${_displayMonth.year}-${_displayMonth.month.toString().padLeft(2, '0')}-01';
     final monthEnd =
         '${_displayMonth.year}-${_displayMonth.month.toString().padLeft(2, '0')}-${daysInMonth.toString().padLeft(2, '0')}';
 
-    // Get all daily_log docs in this month range (doc IDs are date strings)
     final snap = await logsRef
         .where(FieldPath.documentId, isGreaterThanOrEqualTo: monthStart)
         .where(FieldPath.documentId, isLessThanOrEqualTo: monthEnd)
         .get();
 
-    final counts = <int, int>{};
-    for (final doc in snap.docs) {
-      // doc.id is like "2026-03-03"
-      final parts = doc.id.split('-');
-      if (parts.length == 3) {
-        final day = int.tryParse(parts[2]);
-        if (day != null) {
-          // Count foods subcollection
-          final foodSnap =
-              await doc.reference.collection('foods').count().get();
-          final c = foodSnap.count ?? 0;
-          if (c > 0) counts[day] = c;
-        }
-      }
+    if (snap.docs.isEmpty) {
+      if (mounted) setState(() { _dayFoodCounts = {}; _totalDaysLogged = 0; });
+      return;
     }
+
+    // Concurrently fetch food counts for all existing day docs
+    final counts = <int, int>{};
+    await Future.wait(snap.docs.map((doc) async {
+      final parts = doc.id.split('-');
+      if (parts.length != 3) return;
+      final day = int.tryParse(parts[2]);
+      if (day == null) return;
+      final foodSnap = await doc.reference.collection('foods').count().get();
+      final c = foodSnap.count ?? 0;
+      if (c > 0) counts[day] = c;
+    }));
 
     if (mounted) {
       setState(() {
@@ -115,17 +117,34 @@ class _ProgressSheetState extends State<ProgressSheet> {
         .doc(uid)
         .collection('daily_logs');
 
-    int streak = 0;
-    DateTime checkDate = DateTime.now();
-    checkDate = DateTime(checkDate.year, checkDate.month, checkDate.day);
+    // Fetch up to the last 365 days in one query, then check concurrently
+    final today = DateTime.now();
+    final todayNorm = DateTime(today.year, today.month, today.day);
+    final startDate = todayNorm.subtract(const Duration(days: 364));
 
-    // Walk backwards from today checking consecutive days
-    for (int i = 0; i < 365; i++) {
-      final key =
-          '${checkDate.year}-${checkDate.month.toString().padLeft(2, '0')}-${checkDate.day.toString().padLeft(2, '0')}';
+    final snap = await logsRef
+        .where(FieldPath.documentId, isGreaterThanOrEqualTo: _dateKey(startDate))
+        .where(FieldPath.documentId, isLessThanOrEqualTo: _dateKey(todayNorm))
+        .get();
+
+    if (snap.docs.isEmpty) {
+      if (mounted) setState(() => _currentStreak = 0);
+      return;
+    }
+
+    // Concurrently check which docs have at least one food
+    final daysWithFood = <String>{};
+    await Future.wait(snap.docs.map((doc) async {
       final foodSnap =
-          await logsRef.doc(key).collection('foods').count().get();
-      if ((foodSnap.count ?? 0) > 0) {
+          await doc.reference.collection('foods').limit(1).get();
+      if (foodSnap.docs.isNotEmpty) daysWithFood.add(doc.id);
+    }));
+
+    // Walk backwards from today to compute streak
+    int streak = 0;
+    DateTime checkDate = todayNorm;
+    for (int i = 0; i < 365; i++) {
+      if (daysWithFood.contains(_dateKey(checkDate))) {
         streak++;
         checkDate = checkDate.subtract(const Duration(days: 1));
       } else {
@@ -133,9 +152,7 @@ class _ProgressSheetState extends State<ProgressSheet> {
       }
     }
 
-    if (mounted) {
-      setState(() => _currentStreak = streak);
-    }
+    if (mounted) setState(() => _currentStreak = streak);
   }
 
   @override
@@ -163,7 +180,14 @@ class _ProgressSheetState extends State<ProgressSheet> {
         return Container(
           decoration: const BoxDecoration(
             color: Color(0xFFF6F7F9),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x26000000),
+                blurRadius: 40,
+                offset: Offset(0, -8),
+              ),
+            ],
           ),
           padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
           child: Column(
@@ -174,10 +198,10 @@ class _ProgressSheetState extends State<ProgressSheet> {
               Center(
                 child: Container(
                   width: 40,
-                  height: 5,
+                  height: 6,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFCBD5E1),
-                    borderRadius: BorderRadius.circular(3),
+                    color: const Color(0x80CBD5E1),
+                    borderRadius: BorderRadius.circular(999),
                   ),
                 ),
               ),
@@ -189,22 +213,23 @@ class _ProgressSheetState extends State<ProgressSheet> {
                   const Text(
                     'Progress',
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: 22,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF0F172A),
+                      letterSpacing: -0.5,
                     ),
                   ),
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
                     child: Container(
-                      width: 30,
-                      height: 30,
+                      width: 32,
+                      height: 32,
                       decoration: const BoxDecoration(
-                        color: Color(0xFFE2E8F0),
+                        color: Color(0x99E2E8F0),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.close,
-                          size: 18, color: Color(0xFF64748B)),
+                          size: 20, color: Color(0xFF64748B)),
                     ),
                   ),
                 ],

@@ -7,7 +7,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
  * Input:  { name: string }
  * Output: { name, nutrition_per_100g: {calories, protein, carbs, fat},
  *           estimatedDefaultServingGrams, confidence,
- *           thoughtProcess, sources }
+ *           thoughtProcess, sources, defaultUnit, validUnits }
  */
 exports.aiInterpretFood = functions.https.onCall(async (request) => {
   const foodName = request.data?.name;
@@ -51,7 +51,9 @@ Required JSON structure:
   "estimatedDefaultServingGrams": <number>,
   "confidence": <number between 0 and 1>,
   "thoughtProcess": "<2-4 sentences explaining your reasoning: what the food is, how you identified it, what data sources you cross-referenced, and any assumptions made about preparation method or regional variant>",
-  "sources": ["<source 1 name or URL>", "<source 2 name or URL>"]
+  "sources": ["<source 1 name or URL>", "<source 2 name or URL>"],
+  "defaultUnit": "<single most natural unit for this food>",
+  "validUnits": ["<unit1>", "<unit2>"]
 }
 
 Rules:
@@ -62,6 +64,8 @@ Rules:
 - confidence: 0.9-1.0 for common well-known foods with consistent data, 0.7-0.89 for portion-ambiguous foods, 0.4-0.69 for uncommon/vague, below 0.4 for highly ambiguous.
 - "thoughtProcess" should explain: what the food is, how you identified its nutritional profile, which sources you used, and any assumptions (e.g. "assumed restaurant-style preparation", "used USDA standard reference values").
 - "sources" should list 2-4 real references (website names, database names, or URLs) you used. Examples: "USDA FoodData Central", "nutritionvalue.org", "CalorieKing", "Indian Food Composition Table (NIN)".
+- "defaultUnit": the single most natural unit for measuring this food. Use exactly one of: "g", "ml", "bowl", "cup", "plate", "piece", "tbsp", "tsp", "slice", "serving". Use "piece" for discrete countable foods (e.g. bread, puri, idli, egg, biscuit, fruit). Use "g" for grains, powders, loose ingredients (e.g. rice, flour, sugar). Use "ml" for pure liquids. Use "cup" or "bowl" for dishes served in a container.
+- "validUnits": a JSON array of 2-5 strings listing only the units that realistically apply to this food. Choose from: ["g", "ml", "bowl", "cup", "plate", "piece", "tbsp", "tsp", "slice", "serving"]. Examples — puri: ["piece", "serving", "g"], rice: ["g", "cup", "bowl", "serving"], olive oil: ["ml", "tbsp", "tsp"], dal: ["bowl", "cup", "serving", "g"].
 - Return ONLY the JSON object. No markdown. No explanation.`;
 
   try {
@@ -110,6 +114,10 @@ Rules:
       sources: Array.isArray(parsed.sources)
         ? parsed.sources.filter((s) => typeof s === "string").slice(0, 5)
         : ["AI estimation"],
+      defaultUnit: typeof parsed.defaultUnit === "string" ? parsed.defaultUnit : null,
+      validUnits: Array.isArray(parsed.validUnits)
+        ? parsed.validUnits.filter((u) => typeof u === "string")
+        : null,
     };
   } catch (err) {
     console.error("AI interpretation failed:", err);

@@ -35,7 +35,14 @@ class MeasurementsSheet extends StatelessWidget {
         return Container(
           decoration: const BoxDecoration(
             color: Color(0xFFF6F7F9),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x26000000),
+                blurRadius: 40,
+                offset: Offset(0, -8),
+              ),
+            ],
           ),
           padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
           child: Column(
@@ -46,10 +53,10 @@ class MeasurementsSheet extends StatelessWidget {
               Center(
                 child: Container(
                   width: 40,
-                  height: 5,
+                  height: 6,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFCBD5E1),
-                    borderRadius: BorderRadius.circular(3),
+                    color: const Color(0x80CBD5E1),
+                    borderRadius: BorderRadius.circular(999),
                   ),
                 ),
               ),
@@ -61,22 +68,23 @@ class MeasurementsSheet extends StatelessWidget {
                   const Text(
                     'Measurements',
                     style: TextStyle(
-                      fontSize: 20,
+                      fontSize: 22,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF0F172A),
+                      letterSpacing: -0.5,
                     ),
                   ),
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
                     child: Container(
-                      width: 30,
-                      height: 30,
+                      width: 32,
+                      height: 32,
                       decoration: const BoxDecoration(
-                        color: Color(0xFFE2E8F0),
+                        color: Color(0x99E2E8F0),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(Icons.close,
-                          size: 18, color: Color(0xFF64748B)),
+                          size: 20, color: Color(0xFF64748B)),
                     ),
                   ),
                 ],
@@ -211,10 +219,10 @@ class MeasurementsSheet extends StatelessWidget {
               Center(
                 child: Container(
                   width: 40,
-                  height: 5,
+                  height: 6,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFCBD5E1),
-                    borderRadius: BorderRadius.circular(3),
+                    color: const Color(0x80CBD5E1),
+                    borderRadius: BorderRadius.circular(999),
                   ),
                 ),
               ),
@@ -299,10 +307,11 @@ class MeasurementsSheet extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.4),
       builder: (ctx) => Container(
         decoration: const BoxDecoration(
           color: Color(0xFFF6F7F9),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
         child: Column(
@@ -311,10 +320,10 @@ class MeasurementsSheet extends StatelessWidget {
             Center(
               child: Container(
                 width: 40,
-                height: 5,
+                height: 6,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFCBD5E1),
-                  borderRadius: BorderRadius.circular(3),
+                  color: const Color(0x80CBD5E1),
+                  borderRadius: BorderRadius.circular(999),
                 ),
               ),
             ),
@@ -366,18 +375,19 @@ class MeasurementsSheet extends StatelessWidget {
       BuildContext context, String current, DocumentReference docRef) {
     final levels = [
       'Sedentary',
-      'Moderate',
-      'Active',
+      'Lightly Active',
+      'Moderately Active',
       'Very Active',
     ];
 
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.4),
       builder: (ctx) => Container(
         decoration: const BoxDecoration(
           color: Color(0xFFF6F7F9),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
         child: Column(
@@ -386,10 +396,10 @@ class MeasurementsSheet extends StatelessWidget {
             Center(
               child: Container(
                 width: 40,
-                height: 5,
+                height: 6,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFCBD5E1),
-                  borderRadius: BorderRadius.circular(3),
+                  color: const Color(0x80CBD5E1),
+                  borderRadius: BorderRadius.circular(999),
                 ),
               ),
             ),

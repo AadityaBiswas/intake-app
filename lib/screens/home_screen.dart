@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -24,6 +25,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final LogService _logService = LogService();
 
   late DateTime _today;
+  StreamSubscription<DocumentSnapshot>? _goalsSubscription;
 
   MacroType _activeMacro = MacroType.protein;
 
@@ -44,7 +46,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _listenToGoals() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-    FirebaseFirestore.instance
+    _goalsSubscription = FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
         .snapshots()
@@ -62,6 +64,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _goalsSubscription?.cancel();
     super.dispose();
   }
 

@@ -33,6 +33,7 @@ class _SmartFoodInputState extends State<SmartFoodInput>
     with TickerProviderStateMixin {
   final TextEditingController _controller = TextEditingController();
   final FocusNode _focusNode = FocusNode();
+  late final FoodService _resolveService;
 
   Timer? _debounceTimer;
   int _searchVersion = 0;
@@ -46,6 +47,11 @@ class _SmartFoodInputState extends State<SmartFoodInput>
   @override
   void initState() {
     super.initState();
+    _resolveService = FoodService(
+      onProgressUpdate: (stage) {
+        if (mounted) setState(() => _resolveStage = stage);
+      },
+    );
     _controller.addListener(_onTextChanged);
     _focusNode.onKeyEvent = (node, event) {
       if (event is KeyDownEvent) {
@@ -132,15 +138,8 @@ class _SmartFoodInputState extends State<SmartFoodInput>
       _topSuggestion = null;
     });
 
-    // Create service with progress callback for stage updates
-    final service = FoodService(
-      onProgressUpdate: (stage) {
-        if (mounted) setState(() => _resolveStage = stage);
-      },
-    );
-
     try {
-      final resolved = await service.resolveFood(text);
+      final resolved = await _resolveService.resolveFood(text);
 
       if (!mounted) return;
 

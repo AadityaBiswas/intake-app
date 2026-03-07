@@ -53,7 +53,7 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDn2VbauqF8bRepdS_01XQWQNCCEIhjrwk',
+    apiKey: 'AIzaSyCUI3FVT6OTWZSm29lckz6y2eNCt5kJGIY',
     appId: '1:1059808684784:android:ad699e30e6078122717035',
     messagingSenderId: '1059808684784',
     projectId: 'intake-protein',

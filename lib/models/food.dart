@@ -50,6 +50,8 @@ class Food {
   final String source; // "usda" | "ai" | "manual"
   final double? credibilityScore; // AI-generated foods only (0.0–1.0)
   final DateTime? createdAt;
+  final String? preferredUnit; // Natural counting unit: "piece", "g", "ml", etc.
+  final List<String>? validUnits; // Units that make sense for this food
 
   const Food({
     required this.id,
@@ -62,6 +64,8 @@ class Food {
     this.source = 'manual',
     this.credibilityScore,
     this.createdAt,
+    this.preferredUnit,
+    this.validUnits,
   });
 
   /// Dual-read factory: supports both new schema (`nutrition_per_100g` map)
@@ -114,21 +118,30 @@ class Food {
           : data['createdAt'] != null
               ? DateTime.tryParse(data['createdAt'].toString())
               : null,
+      preferredUnit: data['preferredUnit'] as String?,
+      validUnits: data['validUnits'] is List
+          ? List<String>.from(data['validUnits'] as List)
+          : null,
     );
   }
 
   /// Serializes to the new Firestore schema.
-  Map<String, dynamic> toFirestore() => {
-        'name': name,
-        'name_lowercase': nameLowercase,
-        'search_keywords': searchKeywords,
-        'aliases': aliases,
-        'nutrition_per_100g': nutritionPer100g.toMap(),
-        'defaultServingGrams': defaultServingGrams,
-        'source': source,
-        'credibilityScore': credibilityScore,
-        'created_at': FieldValue.serverTimestamp(),
-      };
+  Map<String, dynamic> toFirestore() {
+    final map = <String, dynamic>{
+      'name': name,
+      'name_lowercase': nameLowercase,
+      'search_keywords': searchKeywords,
+      'aliases': aliases,
+      'nutrition_per_100g': nutritionPer100g.toMap(),
+      'defaultServingGrams': defaultServingGrams,
+      'source': source,
+      'credibilityScore': credibilityScore,
+      'created_at': FieldValue.serverTimestamp(),
+    };
+    if (preferredUnit != null) map['preferredUnit'] = preferredUnit;
+    if (validUnits != null && validUnits!.isNotEmpty) map['validUnits'] = validUnits;
+    return map;
+  }
 
   Food copyWith({
     String? id,
@@ -141,6 +154,8 @@ class Food {
     String? source,
     double? credibilityScore,
     DateTime? createdAt,
+    String? preferredUnit,
+    List<String>? validUnits,
   }) {
     return Food(
       id: id ?? this.id,
@@ -153,6 +168,8 @@ class Food {
       source: source ?? this.source,
       credibilityScore: credibilityScore ?? this.credibilityScore,
       createdAt: createdAt ?? this.createdAt,
+      preferredUnit: preferredUnit ?? this.preferredUnit,
+      validUnits: validUnits ?? this.validUnits,
     );
   }
 
