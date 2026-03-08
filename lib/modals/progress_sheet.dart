@@ -87,11 +87,12 @@ class _ProgressSheetState extends State<ProgressSheet> {
         .get();
 
     if (snap.docs.isEmpty) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _dayFoodCounts = {};
           _totalDaysLogged = 0;
         });
+      }
       return;
     }
 
