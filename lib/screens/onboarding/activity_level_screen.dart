@@ -114,7 +114,7 @@ class _ActivityLevelScreenState extends State<ActivityLevelScreen>
                   child: ListView.separated(
                     physics: const BouncingScrollPhysics(),
                     itemCount: _levels.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, i) {
                       final level = _levels[i];
                       final label = level['label'] as String;

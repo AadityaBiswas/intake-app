@@ -158,19 +158,14 @@ class _StepIndicator extends StatelessWidget {
 
 class _ContinueButton extends StatelessWidget {
   final VoidCallback onTap;
-  final bool isLoading;
-  final String label;
   const _ContinueButton({
-    super.key,
     required this.onTap,
-    this.isLoading = false,
-    this.label = 'Continue',
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: isLoading ? null : onTap,
+      onTap: onTap,
       child: Container(
         width: double.infinity,
         height: 54,
@@ -186,23 +181,14 @@ class _ContinueButton extends StatelessWidget {
           ],
         ),
         alignment: Alignment.center,
-        child: isLoading
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  color: Colors.white,
-                  strokeWidth: 2.5,
-                ),
-              )
-            : Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-              ),
+        child: const Text(
+          'Continue',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
+        ),
       ),
     );
   }

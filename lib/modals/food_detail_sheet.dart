@@ -827,7 +827,7 @@ class _SourceRow extends StatelessWidget {
             child: Image.network(
               _faviconUrl,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const Icon(
+              errorBuilder: (_, _, _) => const Icon(
                 Icons.language_rounded,
                 size: 15,
                 color: Color(0xFF94A3B8),
