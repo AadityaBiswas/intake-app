@@ -127,3 +127,68 @@ Rules:
     );
   }
 });
+
+/**
+ * aiCompareFood — HTTPS callable Cloud Function.
+ *
+ * Lightweight AI comparison: asks Gemini if a USDA food description
+ * matches what the user intended by their query.
+ *
+ * Input:  { userQuery: string, usdaDescription: string }
+ * Output: { isSame: boolean }
+ */
+exports.aiCompareFood = functions.https.onCall(async (request) => {
+  const userQuery = request.data?.userQuery;
+  const usdaDescription = request.data?.usdaDescription;
+
+  if (!userQuery || !usdaDescription) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Both 'userQuery' and 'usdaDescription' are required.",
+    );
+  }
+
+  const apiKey = process.env.GEMINI_KEY || functions.config().gemini?.key;
+  if (!apiKey) {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "Gemini API key is not configured.",
+    );
+  }
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash",
+  });
+
+  const prompt = `A user searched for food: "${userQuery.trim()}"
+A database returned: "${usdaDescription.trim()}"
+
+Is the database result the SAME food the user is looking for? Consider:
+- Ignore cooking methods (raw, cooked, grilled, etc.) and color qualifiers (white, brown, etc.)
+- Focus on whether the core food item is the same
+- "Chicken, breast, tenders" is NOT the same as "chicken breast" (tenders are a different cut)
+- "Rice, white, cooked" IS the same as "rice"
+- "Crackers, rice" is NOT the same as "rice"
+
+Reply with ONLY a JSON object: {"isSame": true} or {"isSame": false}`;
+
+  try {
+    const result = await model.generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.0 },
+    });
+
+    let text = result.response.text().trim();
+    if (text.startsWith("```")) {
+      text = text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+    }
+
+    const parsed = JSON.parse(text);
+    return { isSame: parsed.isSame === true };
+  } catch (err) {
+    console.error("AI comparison failed:", err);
+    // On failure, default to rejecting (safer — falls through to full AI)
+    return { isSame: false };
+  }
+});

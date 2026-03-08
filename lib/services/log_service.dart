@@ -26,7 +26,7 @@ class LogService {
 
   Stream<List<LoggedFoodEntry>> streamDailyLogs(DateTime date) {
     if (_auth.currentUser == null) return Stream.value([]);
-    
+
     return _logsRef(date).orderBy('created_at').snapshots().map((snapshot) {
       return snapshot.docs.map((doc) {
         return LoggedFoodEntry.fromFirestore(
@@ -37,7 +37,7 @@ class LogService {
     });
   }
 
-  Future<void> logFood(DateTime date, LoggedFoodEntry entry) async {
+  Future<String> logFood(DateTime date, LoggedFoodEntry entry) async {
     final user = _auth.currentUser;
     if (user != null) {
       // Fire-and-forget: profile data is written during onboarding; only refresh last_active
@@ -48,6 +48,7 @@ class LogService {
 
     final ref = _logsRef(date).doc(); // auto-ID
     await ref.set(entry.toFirestore());
+    return ref.id;
   }
 
   Future<void> updateLoggedFood(DateTime date, LoggedFoodEntry entry) async {

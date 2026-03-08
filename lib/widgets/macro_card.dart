@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -29,6 +30,8 @@ class MacroCard extends StatefulWidget {
   final int goalCalories;
   final MacroType activeMacro;
   final ValueChanged<MacroType> onActiveMacroChanged;
+  final bool isCollapsed;
+  final int expansionResetKey;
 
   const MacroCard({
     super.key,
@@ -42,6 +45,8 @@ class MacroCard extends StatefulWidget {
     this.goalCalories = 2100,
     this.activeMacro = MacroType.protein,
     required this.onActiveMacroChanged,
+    this.isCollapsed = false,
+    this.expansionResetKey = 0,
   });
 
   @override
@@ -49,6 +54,50 @@ class MacroCard extends StatefulWidget {
 }
 
 class _MacroCardState extends State<MacroCard> {
+  bool _tapExpanded = false;
+  Timer? _interactionTimer;
+
+  bool get _isEffectivelyCollapsed => widget.isCollapsed && !_tapExpanded;
+
+  @override
+  void didUpdateWidget(MacroCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isCollapsed && widget.isCollapsed) {
+      // Collapsed via scroll — drop tap override.
+      _tapExpanded = false;
+      _interactionTimer?.cancel();
+    }
+    if (oldWidget.expansionResetKey != widget.expansionResetKey) {
+      // External force-collapse (e.g. food input focused) — drop tap override
+      // even if isCollapsed was already true.
+      _tapExpanded = false;
+      _interactionTimer?.cancel();
+    }
+  }
+
+  @override
+  void dispose() {
+    _interactionTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onInteract() {
+    if (widget.isCollapsed) {
+      setState(() => _tapExpanded = true);
+    }
+    _interactionTimer?.cancel();
+    _interactionTimer = Timer(const Duration(seconds: 30), () {
+      if (mounted && _tapExpanded) {
+        setState(() => _tapExpanded = false);
+      }
+    });
+  }
+
+  void _onMiniTap(MacroType type) {
+    widget.onActiveMacroChanged(type);
+    _onInteract();
+  }
+
   int _valueFor(MacroType type) {
     switch (type) {
       case MacroType.protein:
@@ -85,44 +134,146 @@ class _MacroCardState extends State<MacroCard> {
 
   @override
   Widget build(BuildContext context) {
-    final active = widget.activeMacro;
-    final meta = _macroMeta[active]!;
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-      padding: const EdgeInsets.fromLTRB(24, 18, 24, 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFAFAFB),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: const Color(0xFFF0F0F2),
-          width: 1,
+    return GestureDetector(
+      onTap: _isEffectivelyCollapsed ? _onInteract : null,
+      onPanDown: (_) {
+        if (!_isEffectivelyCollapsed) _onInteract();
+      },
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.fastOutSlowIn,
+        margin: EdgeInsets.symmetric(
+          horizontal: 24,
+          vertical: _isEffectivelyCollapsed ? 12 : 8,
         ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x08000000),
-            blurRadius: 20,
-            offset: Offset(0, 6),
-            spreadRadius: 0,
+        padding: EdgeInsets.fromLTRB(
+          20,
+          _isEffectivelyCollapsed ? 12 : 10,
+          20,
+          10,
+        ),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFAFAFB),
+          borderRadius: BorderRadius.circular(
+            _isEffectivelyCollapsed ? 20 : 24,
           ),
-        ],
+          border: Border.all(color: const Color(0xFFF0F0F2), width: 1),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x08000000),
+              blurRadius: 20,
+              offset: Offset(0, 6),
+              spreadRadius: 0,
+            ),
+          ],
+        ),
+        child: AnimatedSize(
+          duration: const Duration(milliseconds: 350),
+          curve: Curves.fastOutSlowIn,
+          alignment: Alignment.topCenter,
+          child: AnimatedCrossFade(
+            firstChild: _buildCollapsedState(),
+            secondChild: _buildExpandedState(),
+            crossFadeState: _isEffectivelyCollapsed
+                ? CrossFadeState.showFirst
+                : CrossFadeState.showSecond,
+            duration: const Duration(milliseconds: 250),
+            firstCurve: Curves.easeOut,
+            secondCurve: Curves.easeIn,
+            sizeCurve: Curves.fastOutSlowIn,
+          ),
+        ),
       ),
+    );
+  }
+
+  // ─── Collapsed State ─────────────────────────────────────────────
+
+  Widget _buildCollapsedState() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(child: _buildMiniStat(MacroType.calories)),
+        Container(width: 1, height: 24, color: const Color(0xFFE8E8EC)),
+        Expanded(child: _buildMiniStat(MacroType.protein)),
+        Container(width: 1, height: 24, color: const Color(0xFFE8E8EC)),
+        Expanded(child: _buildMiniStat(MacroType.carbs)),
+        Container(width: 1, height: 24, color: const Color(0xFFE8E8EC)),
+        Expanded(child: _buildMiniStat(MacroType.fats)),
+      ],
+    );
+  }
+
+  Widget _buildMiniStat(MacroType type) {
+    final meta = _macroMeta[type]!;
+    final value = _valueFor(type);
+
+    return GestureDetector(
+      onTap: () => _onMiniTap(type),
+      behavior: HitTestBehavior.opaque,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          _buildHeroSection(active, meta),
-          const SizedBox(height: 14),
-          Container(
-            height: 0.5,
-            color: const Color(0xFFE8E8EC),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                '$value',
+                style: GoogleFonts.inter(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF2D3038),
+                  height: 1.1,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              if (meta.unit.isNotEmpty)
+                Text(
+                  meta.unit,
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: const Color(0xFF94A3B8),
+                  ),
+                ),
+            ],
           ),
-          const SizedBox(height: 8),
-          _buildStatsRow(),
+          const SizedBox(height: 1),
+          Text(
+            meta.label,
+            style: GoogleFonts.inter(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFFB0B4BC),
+              letterSpacing: 1.2,
+            ),
+          ),
         ],
       ),
     );
   }
 
-  // ─── Hero Section ─────────────────────────────────────────────────
+  // ─── Expanded State ──────────────────────────────────────────────
+
+  Widget _buildExpandedState() {
+    final active = widget.activeMacro;
+    final meta = _macroMeta[active]!;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildHeroSection(active, meta),
+        const SizedBox(height: 8),
+        Container(height: 0.5, color: const Color(0xFFE8E8EC)),
+        const SizedBox(height: 4),
+        _buildStatsRow(),
+      ],
+    );
+  }
 
   Widget _buildHeroSection(MacroType active, _MacroMeta meta) {
     final value = _valueFor(active);
@@ -151,11 +302,11 @@ class _MacroCardState extends State<MacroCard> {
                   return Text(
                     '$animatedValue',
                     style: GoogleFonts.inter(
-                      fontSize: 52,
+                      fontSize: 40,
                       fontWeight: FontWeight.w700,
                       color: meta.color,
                       height: 1,
-                      letterSpacing: -3,
+                      letterSpacing: -2,
                     ),
                   );
                 },
@@ -182,7 +333,7 @@ class _MacroCardState extends State<MacroCard> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 5),
           // Progress bar
           Container(
             height: 3,
@@ -219,8 +370,6 @@ class _MacroCardState extends State<MacroCard> {
     );
   }
 
-  // ─── Stats Row (Inactive Macros) ──────────────────────────────────
-
   Widget _buildStatsRow() {
     final inactive = _inactiveMacros;
 
@@ -231,7 +380,7 @@ class _MacroCardState extends State<MacroCard> {
             if (i > 0)
               Container(
                 width: 0.5,
-                margin: const EdgeInsets.symmetric(vertical: 6),
+                margin: const EdgeInsets.symmetric(vertical: 3),
                 color: const Color(0xFFE8E8EC),
               ),
             Expanded(child: _buildStatItem(inactive[i])),
@@ -247,10 +396,13 @@ class _MacroCardState extends State<MacroCard> {
     final suffix = meta.unit;
 
     return GestureDetector(
-      onTap: () => widget.onActiveMacroChanged(type),
+      onTap: () {
+        widget.onActiveMacroChanged(type);
+        _onInteract();
+      },
       behavior: HitTestBehavior.opaque,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -263,7 +415,7 @@ class _MacroCardState extends State<MacroCard> {
                 letterSpacing: 1.6,
               ),
             ),
-            const SizedBox(height: 3),
+            const SizedBox(height: 2),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.baseline,

@@ -173,64 +173,80 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          color: Color(0xFFF6F7F9),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
         ),
-        padding: const EdgeInsets.fromLTRB(0, 16, 0, 32),
+        padding: const EdgeInsets.fromLTRB(0, 12, 0, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFFE2E8F0),
-                borderRadius: BorderRadius.circular(2),
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFCBD5E1),
+                  borderRadius: BorderRadius.circular(999),
+                ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             const Text(
               'Select Unit',
               style: TextStyle(
-                fontSize: 18,
+                fontSize: 20,
                 fontWeight: FontWeight.w700,
                 color: Color(0xFF0F172A),
+                letterSpacing: -0.5,
               ),
             ),
             const SizedBox(height: 16),
             Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: curatedUnits.length,
-                itemBuilder: (context, index) {
-                  final unit = curatedUnits[index];
-                  final isSelected = unit == _selectedUnit;
-                  return InkWell(
-                    onTap: () {
-                      Navigator.pop(context);
-                      _onUnitChanged(unit);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                      color: isSelected ? const Color(0xFFF8FAFC) : null,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            _unitDisplayNames[unit] ?? unit,
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                              color: isSelected ? const Color(0xFF0F172A) : const Color(0xFF64748B),
-                            ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFF1F5F9)),
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: curatedUnits.length,
+                    separatorBuilder: (context, index) =>
+                        const Divider(height: 1, indent: 16, endIndent: 16, color: Color(0xFFF1F5F9)),
+                    itemBuilder: (context, index) {
+                      final unit = curatedUnits[index];
+                      final isSelected = unit == _selectedUnit;
+                      return GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () {
+                          Navigator.pop(context);
+                          _onUnitChanged(unit);
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                          child: Row(
+                            children: [
+                              Text(
+                                _unitDisplayNames[unit] ?? unit,
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                  color: isSelected ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                                ),
+                              ),
+                              const Spacer(),
+                              if (isSelected)
+                                const Icon(Icons.check_circle_rounded,
+                                    color: Color(0xFF22C55E), size: 20),
+                            ],
                           ),
-                          if (isSelected)
-                            const Icon(Icons.check, color: Color(0xFF22C55E), size: 20),
-                        ],
-                      ),
-                    ),
-                  );
-                },
+                        ),
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
           ],
@@ -271,15 +287,15 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
               children: [
                 Center(
                   child: Container(
-                    width: 40,
-                    height: 6,
+                    width: 36,
+                    height: 4,
                     decoration: BoxDecoration(
-                      color: const Color(0x80CBD5E1),
+                      color: const Color(0xFFCBD5E1),
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 // Title row — food name + close button
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -343,11 +359,11 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
                 children: [
                   // Macros card
                   _buildMacrosBox(),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
 
                   // Quantity section
                   _buildQuantitySection(),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
 
                   // AI Thought Process
                   if (widget.thoughtProcess != null &&
@@ -360,20 +376,20 @@ class _FoodDetailSheetState extends State<FoodDetailSheet> {
 
                   // Save button
                   if (_hasChanges) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     GestureDetector(
                       onTap: _save,
                       child: Container(
-                        height: 54,
+                        height: 52,
                         decoration: BoxDecoration(
                           color: const Color(0xFF22C55E),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(16),
                           boxShadow: [
                             BoxShadow(
                               color: const Color(0xFF22C55E)
-                                  .withValues(alpha: 0.25),
-                              blurRadius: 16,
-                              offset: const Offset(0, 6),
+                                  .withValues(alpha: 0.2),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
                             ),
                           ],
                         ),

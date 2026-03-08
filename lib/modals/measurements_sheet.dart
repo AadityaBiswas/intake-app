@@ -5,8 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 class MeasurementsSheet extends StatelessWidget {
   const MeasurementsSheet({super.key});
 
-  static void show(BuildContext context) {
-    showModalBottomSheet(
+  static Future<void> show(BuildContext context) {
+    return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -44,7 +44,7 @@ class MeasurementsSheet extends StatelessWidget {
               ),
             ],
           ),
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -52,15 +52,15 @@ class MeasurementsSheet extends StatelessWidget {
               // Handle
               Center(
                 child: Container(
-                  width: 40,
-                  height: 6,
+                  width: 36,
+                  height: 4,
                   decoration: BoxDecoration(
-                    color: const Color(0x80CBD5E1),
+                    color: const Color(0xFFCBD5E1),
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               // Title + close
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -68,7 +68,7 @@ class MeasurementsSheet extends StatelessWidget {
                   const Text(
                     'Measurements',
                     style: TextStyle(
-                      fontSize: 22,
+                      fontSize: 20,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF0F172A),
                       letterSpacing: -0.5,
@@ -83,100 +83,122 @@ class MeasurementsSheet extends StatelessWidget {
                         color: Color(0x99E2E8F0),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.close,
-                          size: 20, color: Color(0xFF64748B)),
+                      child: const Icon(
+                        Icons.close,
+                        size: 20,
+                        color: Color(0xFF64748B),
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-              const Text(
-                'PERSONAL METRICS',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF94A3B8),
-                  letterSpacing: 1.2,
+              const SizedBox(height: 16),
+              // Metrics card
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFF1F5F9)),
+                ),
+                child: Column(
+                  children: [
+                    _EditableMetricRow(
+                      icon: Icons.cake_outlined,
+                      label: 'Age',
+                      value: '$age',
+                      unit: 'Years',
+                      onTap: () => _editNumber(
+                        context,
+                        title: 'Update Age',
+                        current: age.toDouble(),
+                        unit: 'years',
+                        min: 10,
+                        max: 120,
+                        isInt: true,
+                        onSave: (v) => docRef.update({'age': v.toInt()}),
+                      ),
+                    ),
+                    const Divider(
+                      height: 1,
+                      indent: 52,
+                      color: Color(0xFFF1F5F9),
+                    ),
+                    _EditableMetricRow(
+                      icon: Icons.monitor_weight_outlined,
+                      label: 'Weight',
+                      value: weight.toStringAsFixed(1),
+                      unit: 'kg',
+                      onTap: () => _editNumber(
+                        context,
+                        title: 'Update Weight',
+                        current: weight,
+                        unit: 'kg',
+                        min: 20,
+                        max: 300,
+                        isInt: false,
+                        onSave: (v) async {
+                          final h = height / 100;
+                          final bmi = h > 0 ? v / (h * h) : 0.0;
+                          await docRef.update({'weight': v, 'bmi': bmi});
+                        },
+                      ),
+                    ),
+                    const Divider(
+                      height: 1,
+                      indent: 52,
+                      color: Color(0xFFF1F5F9),
+                    ),
+                    _EditableMetricRow(
+                      icon: Icons.straighten_outlined,
+                      label: 'Height',
+                      value: height.toStringAsFixed(1),
+                      unit: 'cm',
+                      onTap: () => _editNumber(
+                        context,
+                        title: 'Update Height',
+                        current: height,
+                        unit: 'cm',
+                        min: 100,
+                        max: 250,
+                        isInt: false,
+                        onSave: (v) async {
+                          final h = v / 100;
+                          final bmi = h > 0 ? weight / (h * h) : 0.0;
+                          await docRef.update({'height': v, 'bmi': bmi});
+                        },
+                      ),
+                    ),
+                    const Divider(
+                      height: 1,
+                      indent: 52,
+                      color: Color(0xFFF1F5F9),
+                    ),
+                    _EditableMetricRow(
+                      icon: Icons.person_outline,
+                      label: 'Gender',
+                      value: gender.isNotEmpty
+                          ? gender[0].toUpperCase() + gender.substring(1)
+                          : '—',
+                      unit: '',
+                      onTap: () => _editGender(context, gender, docRef),
+                    ),
+                    const Divider(
+                      height: 1,
+                      indent: 52,
+                      color: Color(0xFFF1F5F9),
+                    ),
+                    _EditableMetricRow(
+                      icon: Icons.directions_run_outlined,
+                      label: 'Activity',
+                      value: activityLevel.isNotEmpty ? activityLevel : '—',
+                      unit: '',
+                      onTap: () =>
+                          _editActivity(context, activityLevel, docRef),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 12),
-              _EditableMetricRow(
-                icon: Icons.cake_outlined,
-                label: 'Age',
-                value: '$age',
-                unit: 'Years',
-                onTap: () => _editNumber(
-                  context,
-                  title: 'Update Age',
-                  current: age.toDouble(),
-                  unit: 'years',
-                  min: 10,
-                  max: 120,
-                  isInt: true,
-                  onSave: (v) => docRef.update({'age': v.toInt()}),
-                ),
-              ),
-              const Divider(height: 1, color: Color(0x14000000)),
-              _EditableMetricRow(
-                icon: Icons.monitor_weight_outlined,
-                label: 'Weight',
-                value: weight.toStringAsFixed(1),
-                unit: 'kg',
-                onTap: () => _editNumber(
-                  context,
-                  title: 'Update Weight',
-                  current: weight,
-                  unit: 'kg',
-                  min: 20,
-                  max: 300,
-                  isInt: false,
-                  onSave: (v) async {
-                    final h = height / 100;
-                    final bmi = h > 0 ? v / (h * h) : 0.0;
-                    await docRef.update({'weight': v, 'bmi': bmi});
-                  },
-                ),
-              ),
-              const Divider(height: 1, color: Color(0x14000000)),
-              _EditableMetricRow(
-                icon: Icons.straighten_outlined,
-                label: 'Height',
-                value: height.toStringAsFixed(1),
-                unit: 'cm',
-                onTap: () => _editNumber(
-                  context,
-                  title: 'Update Height',
-                  current: height,
-                  unit: 'cm',
-                  min: 100,
-                  max: 250,
-                  isInt: false,
-                  onSave: (v) async {
-                    final h = v / 100;
-                    final bmi = h > 0 ? weight / (h * h) : 0.0;
-                    await docRef.update({'height': v, 'bmi': bmi});
-                  },
-                ),
-              ),
-              const Divider(height: 1, color: Color(0x14000000)),
-              _EditableMetricRow(
-                icon: Icons.person_outline,
-                label: 'Gender',
-                value: gender.isNotEmpty
-                    ? gender[0].toUpperCase() + gender.substring(1)
-                    : '—',
-                unit: '',
-                onTap: () => _editGender(context, gender, docRef),
-              ),
-              const Divider(height: 1, color: Color(0x14000000)),
-              _EditableMetricRow(
-                icon: Icons.directions_run_outlined,
-                label: 'Activity',
-                value: activityLevel.isNotEmpty ? activityLevel : '—',
-                unit: '',
-                onTap: () => _editActivity(context, activityLevel, docRef),
-              ),
-              const SizedBox(height: 24),
             ],
           ),
         );
@@ -203,25 +225,23 @@ class MeasurementsSheet extends StatelessWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(ctx).viewInsets.bottom,
-        ),
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
         child: Container(
           decoration: const BoxDecoration(
             color: Color(0xFFF6F7F9),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
           ),
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Center(
                 child: Container(
-                  width: 40,
-                  height: 6,
+                  width: 36,
+                  height: 4,
                   decoration: BoxDecoration(
-                    color: const Color(0x80CBD5E1),
+                    color: const Color(0xFFCBD5E1),
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
@@ -279,10 +299,17 @@ class MeasurementsSheet extends StatelessWidget {
                   if (ctx.mounted) Navigator.pop(ctx);
                 },
                 child: Container(
-                  height: 50,
+                  height: 52,
                   decoration: BoxDecoration(
                     color: const Color(0xFF22C55E),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF22C55E).withValues(alpha: 0.2),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   alignment: Alignment.center,
                   child: const Text(
@@ -303,7 +330,10 @@ class MeasurementsSheet extends StatelessWidget {
   }
 
   void _editGender(
-      BuildContext context, String current, DocumentReference docRef) {
+    BuildContext context,
+    String current,
+    DocumentReference docRef,
+  ) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -311,28 +341,31 @@ class MeasurementsSheet extends StatelessWidget {
       builder: (ctx) => Container(
         decoration: const BoxDecoration(
           color: Color(0xFFF6F7F9),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
         ),
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Center(
               child: Container(
-                width: 40,
-                height: 6,
+                width: 36,
+                height: 4,
                 decoration: BoxDecoration(
-                  color: const Color(0x80CBD5E1),
+                  color: const Color(0xFFCBD5E1),
                   borderRadius: BorderRadius.circular(999),
                 ),
               ),
             ),
             const SizedBox(height: 16),
-            const Text('Select Gender',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF0F172A))),
+            const Text(
+              'Select Gender',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF0F172A),
+              ),
+            ),
             const SizedBox(height: 16),
             for (final g in ['Male', 'Female', 'Other'])
               GestureDetector(
@@ -356,11 +389,14 @@ class MeasurementsSheet extends StatelessWidget {
                         size: 22,
                       ),
                       const SizedBox(width: 14),
-                      Text(g,
-                          style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF0F172A))),
+                      Text(
+                        g,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -372,7 +408,10 @@ class MeasurementsSheet extends StatelessWidget {
   }
 
   void _editActivity(
-      BuildContext context, String current, DocumentReference docRef) {
+    BuildContext context,
+    String current,
+    DocumentReference docRef,
+  ) {
     final levels = [
       'Sedentary',
       'Lightly Active',
@@ -387,28 +426,31 @@ class MeasurementsSheet extends StatelessWidget {
       builder: (ctx) => Container(
         decoration: const BoxDecoration(
           color: Color(0xFFF6F7F9),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
         ),
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Center(
               child: Container(
-                width: 40,
-                height: 6,
+                width: 36,
+                height: 4,
                 decoration: BoxDecoration(
-                  color: const Color(0x80CBD5E1),
+                  color: const Color(0xFFCBD5E1),
                   borderRadius: BorderRadius.circular(999),
                 ),
               ),
             ),
             const SizedBox(height: 16),
-            const Text('Activity Level',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF0F172A))),
+            const Text(
+              'Activity Level',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF0F172A),
+              ),
+            ),
             const SizedBox(height: 16),
             for (final level in levels)
               GestureDetector(
@@ -432,11 +474,14 @@ class MeasurementsSheet extends StatelessWidget {
                         size: 22,
                       ),
                       const SizedBox(width: 14),
-                      Text(level,
-                          style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF0F172A))),
+                      Text(
+                        level,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -468,31 +513,39 @@ class _EditableMetricRow extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           children: [
-            Icon(icon, size: 22, color: const Color(0xFF475569)),
-            const SizedBox(width: 14),
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: 16, color: const Color(0xFF64748B)),
+            ),
+            const SizedBox(width: 12),
             Text(
               label,
               style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-                color: Color(0xFF334155),
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF0F172A),
+                letterSpacing: -0.2,
               ),
             ),
             const Spacer(),
             Text(
               unit.isNotEmpty ? '$value $unit' : value,
               style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: Color(0xFF0F172A),
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF94A3B8),
               ),
             ),
-            const SizedBox(width: 6),
-            const Icon(Icons.chevron_right_rounded,
-                size: 18, color: Color(0xFF94A3B8)),
+            const SizedBox(width: 4),
+            const Icon(Icons.chevron_right, size: 18, color: Color(0xFFCBD5E1)),
           ],
         ),
       ),

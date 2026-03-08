@@ -5,8 +5,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 class ProgressSheet extends StatefulWidget {
   const ProgressSheet({super.key});
 
-  static void show(BuildContext context) {
-    showModalBottomSheet(
+  static Future<void> show(BuildContext context) {
+    return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -71,8 +71,11 @@ class _ProgressSheetState extends State<ProgressSheet> {
         .doc(uid)
         .collection('daily_logs');
 
-    final daysInMonth =
-        DateTime(_displayMonth.year, _displayMonth.month + 1, 0).day;
+    final daysInMonth = DateTime(
+      _displayMonth.year,
+      _displayMonth.month + 1,
+      0,
+    ).day;
     final monthStart =
         '${_displayMonth.year}-${_displayMonth.month.toString().padLeft(2, '0')}-01';
     final monthEnd =
@@ -84,21 +87,27 @@ class _ProgressSheetState extends State<ProgressSheet> {
         .get();
 
     if (snap.docs.isEmpty) {
-      if (mounted) setState(() { _dayFoodCounts = {}; _totalDaysLogged = 0; });
+      if (mounted)
+        setState(() {
+          _dayFoodCounts = {};
+          _totalDaysLogged = 0;
+        });
       return;
     }
 
     // Concurrently fetch food counts for all existing day docs
     final counts = <int, int>{};
-    await Future.wait(snap.docs.map((doc) async {
-      final parts = doc.id.split('-');
-      if (parts.length != 3) return;
-      final day = int.tryParse(parts[2]);
-      if (day == null) return;
-      final foodSnap = await doc.reference.collection('foods').count().get();
-      final c = foodSnap.count ?? 0;
-      if (c > 0) counts[day] = c;
-    }));
+    await Future.wait(
+      snap.docs.map((doc) async {
+        final parts = doc.id.split('-');
+        if (parts.length != 3) return;
+        final day = int.tryParse(parts[2]);
+        if (day == null) return;
+        final foodSnap = await doc.reference.collection('foods').count().get();
+        final c = foodSnap.count ?? 0;
+        if (c > 0) counts[day] = c;
+      }),
+    );
 
     if (mounted) {
       setState(() {
@@ -123,7 +132,10 @@ class _ProgressSheetState extends State<ProgressSheet> {
     final startDate = todayNorm.subtract(const Duration(days: 364));
 
     final snap = await logsRef
-        .where(FieldPath.documentId, isGreaterThanOrEqualTo: _dateKey(startDate))
+        .where(
+          FieldPath.documentId,
+          isGreaterThanOrEqualTo: _dateKey(startDate),
+        )
         .where(FieldPath.documentId, isLessThanOrEqualTo: _dateKey(todayNorm))
         .get();
 
@@ -134,11 +146,12 @@ class _ProgressSheetState extends State<ProgressSheet> {
 
     // Concurrently check which docs have at least one food
     final daysWithFood = <String>{};
-    await Future.wait(snap.docs.map((doc) async {
-      final foodSnap =
-          await doc.reference.collection('foods').limit(1).get();
-      if (foodSnap.docs.isNotEmpty) daysWithFood.add(doc.id);
-    }));
+    await Future.wait(
+      snap.docs.map((doc) async {
+        final foodSnap = await doc.reference.collection('foods').limit(1).get();
+        if (foodSnap.docs.isNotEmpty) daysWithFood.add(doc.id);
+      }),
+    );
 
     // Walk backwards from today to compute streak
     int streak = 0;
@@ -155,6 +168,156 @@ class _ProgressSheetState extends State<ProgressSheet> {
     if (mounted) setState(() => _currentStreak = streak);
   }
 
+  void _editGoal(String currentGoal) {
+    final goals = ['Lose Weight', 'Maintain Weight', 'Gain Weight'];
+    final goalIcons = {
+      'Lose Weight': Icons.trending_down_rounded,
+      'Maintain Weight': Icons.balance_rounded,
+      'Gain Weight': Icons.trending_up_rounded,
+    };
+    final goalSubtitles = {
+      'Lose Weight': 'Create a calorie deficit',
+      'Maintain Weight': 'Stay fit and healthy',
+      'Gain Weight': 'Build muscle and strength',
+    };
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: Color(0xFFF6F7F9),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFCBD5E1),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Choose Your Goal',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF0F172A),
+                letterSpacing: -0.5,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFF1F5F9)),
+              ),
+              child: Column(
+                children: goals.asMap().entries.map((entry) {
+                  final goal = entry.value;
+                  final isSelected = goal == currentGoal;
+                  final isLast = entry.key == goals.length - 1;
+                  return Column(
+                    children: [
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () async {
+                          Navigator.pop(ctx);
+                          final uid = FirebaseAuth.instance.currentUser?.uid;
+                          if (uid != null) {
+                            await FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(uid)
+                                .update({'weight_goal': goal});
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 28,
+                                height: 28,
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? const Color(0xFFECFDF5)
+                                      : const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Icon(
+                                  goalIcons[goal],
+                                  size: 16,
+                                  color: isSelected
+                                      ? const Color(0xFF22C55E)
+                                      : const Color(0xFF64748B),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      goal,
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        color: isSelected
+                                            ? const Color(0xFF0F172A)
+                                            : const Color(0xFF64748B),
+                                        letterSpacing: -0.2,
+                                      ),
+                                    ),
+                                    Text(
+                                      goalSubtitles[goal]!,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w500,
+                                        color: Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (isSelected)
+                                const Icon(
+                                  Icons.check_circle_rounded,
+                                  color: Color(0xFF22C55E),
+                                  size: 20,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (!isLast)
+                        const Divider(
+                          height: 1,
+                          indent: 52,
+                          color: Color(0xFFF1F5F9),
+                        ),
+                    ],
+                  );
+                }).toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -167,12 +330,16 @@ class _ProgressSheetState extends State<ProgressSheet> {
           .snapshots(),
       builder: (context, snap) {
         final data = snap.data?.data() as Map<String, dynamic>? ?? {};
-        final weightGoal = data['weightGoal'] as String? ??
+        final weightGoal =
+            data['weightGoal'] as String? ??
             data['weight_goal'] as String? ??
             'Maintain Weight';
 
-        final daysInMonth =
-            DateTime(_displayMonth.year, _displayMonth.month + 1, 0).day;
+        final daysInMonth = DateTime(
+          _displayMonth.year,
+          _displayMonth.month + 1,
+          0,
+        ).day;
         final consistency = daysInMonth > 0
             ? ((_totalDaysLogged / daysInMonth) * 100).round()
             : 0;
@@ -189,7 +356,7 @@ class _ProgressSheetState extends State<ProgressSheet> {
               ),
             ],
           ),
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 28),
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -197,15 +364,15 @@ class _ProgressSheetState extends State<ProgressSheet> {
               // Handle
               Center(
                 child: Container(
-                  width: 40,
-                  height: 6,
+                  width: 36,
+                  height: 4,
                   decoration: BoxDecoration(
-                    color: const Color(0x80CBD5E1),
+                    color: const Color(0xFFCBD5E1),
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
               // Title + close
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -213,7 +380,7 @@ class _ProgressSheetState extends State<ProgressSheet> {
                   const Text(
                     'Progress',
                     style: TextStyle(
-                      fontSize: 22,
+                      fontSize: 20,
                       fontWeight: FontWeight.w700,
                       color: Color(0xFF0F172A),
                       letterSpacing: -0.5,
@@ -228,64 +395,76 @@ class _ProgressSheetState extends State<ProgressSheet> {
                         color: Color(0x99E2E8F0),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.close,
-                          size: 20, color: Color(0xFF64748B)),
+                      child: const Icon(
+                        Icons.close,
+                        size: 20,
+                        color: Color(0xFF64748B),
+                      ),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
-              // YOUR GOAL
-              const Text(
-                'YOUR GOAL',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF94A3B8),
-                  letterSpacing: 1.2,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFF1F5F9)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFECFDF5),
-                        borderRadius: BorderRadius.circular(8),
+              // YOUR GOAL — tappable
+              GestureDetector(
+                onTap: () => _editGoal(weightGoal),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFF1F5F9)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECFDF5),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.flag_rounded,
+                          color: Color(0xFF22C55E),
+                          size: 16,
+                        ),
                       ),
-                      child: const Icon(Icons.check_circle_rounded,
-                          color: Color(0xFF22C55E), size: 20),
-                    ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          weightGoal,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF0F172A),
-                          ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              weightGoal,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF0F172A),
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                            const Text(
+                              'Tap to change goal',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF94A3B8),
+                              ),
+                            ),
+                          ],
                         ),
-                        const Text(
-                          'Stay fit and healthy',
-                          style: TextStyle(
-                              fontSize: 12, color: Color(0xFF94A3B8)),
-                        ),
-                      ],
-                    ),
-                  ],
+                      ),
+                      const Icon(
+                        Icons.chevron_right,
+                        size: 18,
+                        color: Color(0xFFCBD5E1),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
@@ -306,16 +485,21 @@ class _ProgressSheetState extends State<ProgressSheet> {
                     children: [
                       GestureDetector(
                         onTap: _prev,
-                        child: const Icon(Icons.chevron_left_rounded,
-                            size: 22, color: Color(0xFF94A3B8)),
+                        child: const Icon(
+                          Icons.chevron_left_rounded,
+                          size: 22,
+                          color: Color(0xFF94A3B8),
+                        ),
                       ),
                       GestureDetector(
                         onTap: _isCurrentMonth ? null : _next,
-                        child: Icon(Icons.chevron_right_rounded,
-                            size: 22,
-                            color: _isCurrentMonth
-                                ? const Color(0xFFE2E8F0)
-                                : const Color(0xFF94A3B8)),
+                        child: Icon(
+                          Icons.chevron_right_rounded,
+                          size: 22,
+                          color: _isCurrentMonth
+                              ? const Color(0xFFE2E8F0)
+                              : const Color(0xFF94A3B8),
+                        ),
                       ),
                     ],
                   ),
@@ -344,44 +528,66 @@ class _ProgressSheetState extends State<ProgressSheet> {
                 children: [
                   _legendDot(const Color(0xFFE2E8F0)),
                   const SizedBox(width: 4),
-                  const Text('None',
-                      style:
-                          TextStyle(fontSize: 10, color: Color(0xFFB0B8C4))),
+                  const Text(
+                    'None',
+                    style: TextStyle(fontSize: 10, color: Color(0xFFB0B8C4)),
+                  ),
                   const SizedBox(width: 12),
                   _legendDot(const Color(0xFF86EFAC)),
                   const SizedBox(width: 4),
-                  const Text('Some',
-                      style:
-                          TextStyle(fontSize: 10, color: Color(0xFFB0B8C4))),
+                  const Text(
+                    'Some',
+                    style: TextStyle(fontSize: 10, color: Color(0xFFB0B8C4)),
+                  ),
                   const SizedBox(width: 12),
                   _legendDot(const Color(0xFF22C55E)),
                   const SizedBox(width: 4),
-                  const Text('Lots',
-                      style:
-                          TextStyle(fontSize: 10, color: Color(0xFFB0B8C4))),
+                  const Text(
+                    'Lots',
+                    style: TextStyle(fontSize: 10, color: Color(0xFFB0B8C4)),
+                  ),
                 ],
               ),
               const SizedBox(height: 20),
-              // Stats
-              _StatRow(
-                icon: Icons.local_fire_department_rounded,
-                label: 'Current Streak',
-                value:
-                    '$_currentStreak ${_currentStreak == 1 ? 'Day' : 'Days'}',
+              // Stats card
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFF1F5F9)),
+                ),
+                child: Column(
+                  children: [
+                    _StatRow(
+                      icon: Icons.local_fire_department_rounded,
+                      label: 'Current Streak',
+                      value:
+                          '$_currentStreak ${_currentStreak == 1 ? 'Day' : 'Days'}',
+                    ),
+                    const Divider(
+                      height: 1,
+                      indent: 52,
+                      color: Color(0xFFF1F5F9),
+                    ),
+                    _StatRow(
+                      icon: Icons.calendar_today_rounded,
+                      label: 'Days Logged',
+                      value: '$_totalDaysLogged this month',
+                    ),
+                    const Divider(
+                      height: 1,
+                      indent: 52,
+                      color: Color(0xFFF1F5F9),
+                    ),
+                    _StatRow(
+                      icon: Icons.auto_awesome_rounded,
+                      label: 'Consistency',
+                      value: '$consistency%',
+                    ),
+                  ],
+                ),
               ),
-              const Divider(height: 1, color: Color(0x14000000)),
-              _StatRow(
-                icon: Icons.calendar_today_rounded,
-                label: 'Days Logged',
-                value: '$_totalDaysLogged this month',
-              ),
-              const Divider(height: 1, color: Color(0x14000000)),
-              _StatRow(
-                icon: Icons.auto_awesome_rounded,
-                label: 'Consistency',
-                value: '$consistency%',
-              ),
-              const SizedBox(height: 16),
             ],
           ),
         );
@@ -390,10 +596,16 @@ class _ProgressSheetState extends State<ProgressSheet> {
   }
 
   Widget _buildGrid() {
-    final daysInMonth =
-        DateTime(_displayMonth.year, _displayMonth.month + 1, 0).day;
-    final firstWeekday =
-        DateTime(_displayMonth.year, _displayMonth.month, 1).weekday;
+    final daysInMonth = DateTime(
+      _displayMonth.year,
+      _displayMonth.month + 1,
+      0,
+    ).day;
+    final firstWeekday = DateTime(
+      _displayMonth.year,
+      _displayMonth.month,
+      1,
+    ).weekday;
     final today = DateTime.now();
 
     int maxCount = 1;
@@ -412,9 +624,13 @@ class _ProgressSheetState extends State<ProgressSheet> {
               if (dayNum < 1 || dayNum > daysInMonth) {
                 return const SizedBox(width: 32, height: 32);
               }
-              final date =
-                  DateTime(_displayMonth.year, _displayMonth.month, dayNum);
-              final isToday = date.year == today.year &&
+              final date = DateTime(
+                _displayMonth.year,
+                _displayMonth.month,
+                dayNum,
+              );
+              final isToday =
+                  date.year == today.year &&
                   date.month == today.month &&
                   date.day == today.day;
               final isPast = date.isBefore(today) || isToday;
@@ -434,8 +650,8 @@ class _ProgressSheetState extends State<ProgressSheet> {
                           intensity,
                         )
                       : (isPast
-                          ? const Color(0xFFE2E8F0)
-                          : const Color(0xFFF1F5F9)),
+                            ? const Color(0xFFE2E8F0)
+                            : const Color(0xFFF1F5F9)),
                   borderRadius: BorderRadius.circular(6),
                   border: isToday
                       ? Border.all(color: const Color(0xFF22C55E), width: 2)
@@ -462,13 +678,13 @@ class _ProgressSheetState extends State<ProgressSheet> {
   }
 
   Widget _legendDot(Color color) => Container(
-        width: 12,
-        height: 12,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(3),
-        ),
-      );
+    width: 12,
+    height: 12,
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(3),
+    ),
+  );
 
   String _monthName() {
     const names = [
@@ -484,7 +700,7 @@ class _ProgressSheetState extends State<ProgressSheet> {
       'September',
       'October',
       'November',
-      'December'
+      'December',
     ];
     return '${names[_displayMonth.month]} ${_displayMonth.year}';
   }
@@ -495,45 +711,63 @@ class _DayLabel extends StatelessWidget {
   const _DayLabel(this.label);
   @override
   Widget build(BuildContext context) => SizedBox(
-        width: 32,
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 10,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFFB0B8C4),
-          ),
-        ),
-      );
+    width: 32,
+    child: Text(
+      label,
+      textAlign: TextAlign.center,
+      style: const TextStyle(
+        fontSize: 10,
+        fontWeight: FontWeight.w600,
+        color: Color(0xFFB0B8C4),
+      ),
+    ),
+  );
 }
 
 class _StatRow extends StatelessWidget {
   final IconData icon;
   final String label;
   final String value;
-  const _StatRow(
-      {required this.icon, required this.label, required this.value});
+  const _StatRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        child: Row(
-          children: [
-            Icon(icon, size: 20, color: const Color(0xFF475569)),
-            const SizedBox(width: 14),
-            Text(label,
-                style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF334155))),
-            const Spacer(),
-            Text(value,
-                style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF0F172A))),
-          ],
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+    child: Row(
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 16, color: const Color(0xFF64748B)),
         ),
-      );
+        const SizedBox(width: 12),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF0F172A),
+            letterSpacing: -0.2,
+          ),
+        ),
+        const Spacer(),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF94A3B8),
+          ),
+        ),
+      ],
+    ),
+  );
 }

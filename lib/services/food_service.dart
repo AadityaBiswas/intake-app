@@ -1,11 +1,15 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:http/http.dart' as http;
 import '../models/food.dart';
 import '../models/scaled_nutrition.dart';
 import 'ai_food_service.dart';
 import 'input_parser.dart';
 import 'scaling_engine.dart';
+
+/// Result of the bidirectional relevance check.
+enum _RelevanceResult { match, reject, ambiguous }
 
 /// Result from the resolution pipeline.
 class ResolvedFood {
@@ -252,8 +256,13 @@ class FoodService {
         final description = (item['description'] as String? ?? '').trim();
         if (description.isEmpty) continue;
 
-        if (!_isRelevant(foodName, description)) {
-          continue;
+        final relevance = _checkRelevance(foodName, description);
+        if (relevance == _RelevanceResult.reject) continue;
+
+        // If ambiguous, ask AI to compare
+        if (relevance == _RelevanceResult.ambiguous) {
+          final isSame = await _aiCompareFood(foodName, description);
+          if (!isSame) continue; // skip this result, try next
         }
 
         final nutrition = _extractNutrition(item as Map<String, dynamic>);
@@ -332,13 +341,13 @@ class FoodService {
   /// Tolerance: `maxExtra = (queryTokenLength - 1).clamp(0, 2)` so that
   /// single-word queries allow 0 extra food tokens and multi-word queries
   /// allow a small number of USDA-style qualifiers.
-  bool _isRelevant(String query, String description) {
+  _RelevanceResult _checkRelevance(String query, String description) {
     final queryTokens = query
         .toLowerCase()
         .split(RegExp(r'[\s,.\-()/]+'))
         .where((t) => t.length > 1)
         .toSet();
-    if (queryTokens.isEmpty) return false;
+    if (queryTokens.isEmpty) return _RelevanceResult.reject;
 
     final descTokens = description
         .toLowerCase()
@@ -347,7 +356,9 @@ class FoodService {
         .toSet();
 
     // Forward check: every query token must appear in the description
-    if (!queryTokens.every((t) => descTokens.contains(t))) return false;
+    if (!queryTokens.every((t) => descTokens.contains(t))) {
+      return _RelevanceResult.reject;
+    }
 
     // Reverse check: count description tokens that are neither in the query
     // nor in the modifier allowlist — these are genuine "extra food words"
@@ -358,8 +369,27 @@ class FoodService {
             !_usdaModifiers.contains(t))
         .toSet();
 
-    final maxExtra = (queryTokens.length - 1).clamp(0, 2);
-    return extraFoodTokens.length <= maxExtra;
+    if (extraFoodTokens.isEmpty) return _RelevanceResult.match;
+
+    // Any unknown extra tokens → ambiguous, needs AI verification
+    return _RelevanceResult.ambiguous;
+  }
+
+  /// Calls the `aiCompareFood` Cloud Function to determine if a USDA
+  /// food description matches the user's intended food.
+  Future<bool> _aiCompareFood(String userQuery, String usdaDescription) async {
+    try {
+      final callable = FirebaseFunctions.instance
+          .httpsCallable('aiCompareFood');
+      final result = await callable.call<Map<String, dynamic>>({
+        'userQuery': userQuery.trim(),
+        'usdaDescription': usdaDescription.trim(),
+      });
+      return result.data['isSame'] == true;
+    } catch (e) {
+      // On failure, default to rejecting (safer)
+      return false;
+    }
   }
 
   /// Extracts nutrition per 100g from a USDA food entry.

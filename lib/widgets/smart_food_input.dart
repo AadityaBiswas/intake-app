@@ -17,12 +17,16 @@ class SmartFoodInput extends StatefulWidget {
 
   final Function(String customName) onCustomFood;
   final FoodService service;
+  final int foodCount;
+  final FocusNode? externalFocusNode;
 
   const SmartFoodInput({
     super.key,
     required this.onFoodResolved,
     required this.onCustomFood,
     required this.service,
+    this.foodCount = 0,
+    this.externalFocusNode,
   });
 
   @override
@@ -30,9 +34,9 @@ class SmartFoodInput extends StatefulWidget {
 }
 
 class _SmartFoodInputState extends State<SmartFoodInput>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   final TextEditingController _controller = TextEditingController();
-  final FocusNode _focusNode = FocusNode();
+  late final FocusNode _focusNode;
   late final FoodService _resolveService;
 
   Timer? _debounceTimer;
@@ -40,13 +44,19 @@ class _SmartFoodInputState extends State<SmartFoodInput>
 
   bool _isSearching = false;
   bool _isResolving = false;
+  bool _showingSources = false;
   Food? _topSuggestion;
   String _statusMessage = '';
   String _resolveStage = '';
+  List<String> _resolvedSources = [];
+  String _resolvedFoodName = '';
+  bool _keyboardVisible = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _focusNode = widget.externalFocusNode ?? FocusNode();
     _resolveService = FoodService(
       onProgressUpdate: (stage) {
         if (mounted) setState(() => _resolveStage = stage);
@@ -67,11 +77,27 @@ class _SmartFoodInputState extends State<SmartFoodInput>
   }
 
   @override
+  void didChangeMetrics() {
+    // Detect keyboard show/hide
+    final bottomInset = WidgetsBinding.instance.platformDispatcher.views.first.viewInsets.bottom;
+    final isNowVisible = bottomInset > 0;
+    if (_keyboardVisible && !isNowVisible) {
+      // Keyboard just closed — unfocus if text is empty
+      if (_controller.text.trim().isEmpty && _focusNode.hasFocus) {
+        _focusNode.unfocus();
+      }
+    }
+    _keyboardVisible = isNowVisible;
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _debounceTimer?.cancel();
     _controller.removeListener(_onTextChanged);
     _controller.dispose();
-    _focusNode.dispose();
+    // Only dispose if we created it ourselves
+    if (widget.externalFocusNode == null) _focusNode.dispose();
     super.dispose();
   }
 
@@ -133,9 +159,11 @@ class _SmartFoodInputState extends State<SmartFoodInput>
 
     setState(() {
       _isResolving = true;
+      _showingSources = false;
       _resolveStage = 'Searching database...';
       _statusMessage = '';
       _topSuggestion = null;
+      _resolvedFoodName = text;
     });
 
     try {
@@ -143,7 +171,19 @@ class _SmartFoodInputState extends State<SmartFoodInput>
 
       if (!mounted) return;
 
-      // Clear input AFTER resolution
+      // If AI resolved with sources, show them for 1.5s before adding
+      if (resolved != null &&
+          resolved.sources != null &&
+          resolved.sources!.isNotEmpty) {
+        setState(() {
+          _showingSources = true;
+          _resolvedSources = resolved.sources!;
+        });
+        await Future.delayed(const Duration(milliseconds: 2500));
+        if (!mounted) return;
+      }
+
+      // Clear input AFTER displaying sources
       _controller.removeListener(_onTextChanged);
       _controller.clear();
       _controller.addListener(_onTextChanged);
@@ -173,6 +213,9 @@ class _SmartFoodInputState extends State<SmartFoodInput>
       _topSuggestion = null;
       _statusMessage = '';
       _isResolving = false;
+      _showingSources = false;
+      _resolvedSources = [];
+      _resolvedFoodName = '';
       _resolveStage = '';
     });
   }
@@ -194,9 +237,9 @@ class _SmartFoodInputState extends State<SmartFoodInput>
             controller: _controller,
             focusNode: _focusNode,
             onSubmitted: (_) => _submit(),
-            decoration: const InputDecoration(
-              hintText: 'Type food...',
-              hintStyle: TextStyle(
+            decoration: InputDecoration(
+              hintText: widget.foodCount >= 2 ? null : 'Type food...',
+              hintStyle: const TextStyle(
                 color: Color(0xFF94A3B8),
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
@@ -223,30 +266,138 @@ class _SmartFoodInputState extends State<SmartFoodInput>
     );
   }
 
-  /// The resolving row: food name on left, animated search status on right
+  /// The resolving row: food name on left, animated status on right
   Widget _buildResolvingRow() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Food name (preserved)
+          // Food name (preserved — same style as input field)
           Expanded(
             child: Text(
-              _controller.text,
+              _resolvedFoodName.isNotEmpty ? _resolvedFoodName : _controller.text,
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
-                color: Color(0xFF64748B),
+                color: Color(0xFF0F172A),
                 letterSpacing: -0.5,
               ),
             ),
           ),
-          // Search animation on the right
-          _SearchStatusBadge(stage: _resolveStage),
+          // Right side: single AnimatedSwitcher for all 3 states
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 500),
+            switchInCurve: Curves.easeOut,
+            switchOutCurve: Curves.easeIn,
+            transitionBuilder: (child, animation) {
+              return FadeTransition(
+                opacity: animation,
+                child: child,
+              );
+            },
+            child: _buildRightStatus(),
+          ),
         ],
       ),
     );
+  }
+
+  /// Returns the correct right-side widget with a unique key for AnimatedSwitcher
+  Widget _buildRightStatus() {
+    // State 3: showing sources (after search completes)
+    if (_showingSources && _resolvedSources.isNotEmpty) {
+      return _buildSourcesBadge();
+    }
+
+    // State 1 & 2: searching
+    final isWeb = _resolveStage.toLowerCase().contains('ai') ||
+        _resolveStage.toLowerCase().contains('web');
+    final label = isWeb ? 'Searching the web' : 'Searching';
+
+    return _PulsingText(
+      key: ValueKey(label),
+      text: label,
+    );
+  }
+
+  /// Stacked source favicon icons + "N+ sources" text
+  Widget _buildSourcesBadge() {
+    final count = _resolvedSources.length;
+    final favicons = _resolvedSources.take(3).map(_getFaviconUrl).toList();
+    return Row(
+      key: const ValueKey('sources_badge'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Stacked favicon icons
+        SizedBox(
+          width: 22.0 + ((favicons.length - 1).clamp(0, 2) * 12.0),
+          height: 22,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              for (int i = 0; i < favicons.length; i++)
+                Positioned(
+                  left: i * 12.0,
+                  child: Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: const Color(0xFFE2E8F0), width: 1.5),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Center(
+                      child: ClipOval(
+                        child: Image.network(
+                          favicons[i],
+                          width: 14,
+                          height: 14,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, e, st) => const Icon(
+                            Icons.language_rounded,
+                            size: 12,
+                            color: Color(0xFF94A3B8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          '$count+ sources',
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF94A3B8),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _getFaviconUrl(String source) {
+    String domain = source.toLowerCase();
+    if (domain.contains('usda') || domain.contains('fooddata')) {
+      domain = 'fdc.nal.usda.gov';
+    } else if (domain.contains('calorieking')) {
+      domain = 'calorieking.com';
+    } else if (domain.contains('myfitnesspal')) {
+      domain = 'myfitnesspal.com';
+    } else if (domain.contains('fatsecret')) {
+      domain = 'fatsecret.com';
+    } else if (domain.contains('nin') || domain.contains('indian food composition')) {
+      domain = 'nin.res.in';
+    } else {
+      final match = RegExp(r'[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}').firstMatch(domain);
+      domain = match != null ? match.group(0)! : 'example.com';
+    }
+    return 'https://www.google.com/s2/favicons?domain=$domain&sz=64';
   }
 
   Widget _buildBelowStatus() {
@@ -351,24 +502,23 @@ class _SmartFoodInputState extends State<SmartFoodInput>
   }
 }
 
-/// Animated search status badge on the right side of the food row.
-/// Shows spinner + stage label with source icons.
-class _SearchStatusBadge extends StatefulWidget {
-  final String stage;
-  const _SearchStatusBadge({required this.stage});
+/// Simple pulsing text widget — fades between 0.4 and 1.0 opacity.
+class _PulsingText extends StatefulWidget {
+  final String text;
+  const _PulsingText({super.key, required this.text});
 
   @override
-  State<_SearchStatusBadge> createState() => _SearchStatusBadgeState();
+  State<_PulsingText> createState() => _PulsingTextState();
 }
 
-class _SearchStatusBadgeState extends State<_SearchStatusBadge>
+class _PulsingTextState extends State<_PulsingText>
     with SingleTickerProviderStateMixin {
-  late AnimationController _pulseCtrl;
+  late AnimationController _ctrl;
 
   @override
   void initState() {
     super.initState();
-    _pulseCtrl = AnimationController(
+    _ctrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
@@ -376,55 +526,24 @@ class _SearchStatusBadgeState extends State<_SearchStatusBadge>
 
   @override
   void dispose() {
-    _pulseCtrl.dispose();
+    _ctrl.dispose();
     super.dispose();
-  }
-
-  bool get _isWeb =>
-      widget.stage.toLowerCase().contains('ai') ||
-      widget.stage.toLowerCase().contains('web');
-
-  String get _label {
-    if (_isWeb) return 'Searching the web...';
-    return 'Searching database...';
-  }
-
-  IconData? get _icon {
-    if (_isWeb) return Icons.travel_explore_rounded;
-    return null;
-  }
-
-  Color get _color {
-    return const Color(0xFF94A3B8);
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _pulseCtrl,
-      builder: (context, child) {
-        final opacity = 0.5 + (_pulseCtrl.value * 0.5);
-        return Opacity(
-          opacity: opacity,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_icon != null) ...[
-                Icon(_icon!, size: 14, color: _color),
-                const SizedBox(width: 6),
-              ],
-              Text(
-                _label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: _color,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.4, end: 1.0).animate(
+        CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+      ),
+      child: Text(
+        widget.text,
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+          color: Color(0xFF94A3B8),
+        ),
+      ),
     );
   }
 }

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter analyze lib/widgets/macro_card.dart)",
+      "Bash(cmd /c \"cd /d d:\\\\apps\\\\intake\\\\intake-app && flutter analyze lib/widgets/macro_card.dart 2>&1\")",
+      "Bash(cmd /c \"cd /d d:\\\\apps\\\\intake\\\\intake-app && flutter analyze lib/widgets/macro_card.dart\")",
+      "Bash(cmd /c \"cd /d d:\\\\apps\\\\intake\\\\intake-app && flutter analyze lib/widgets/macro_card.dart 2>&1 & echo EXIT:%errorlevel%\")"
+    ]
+  }
+}
