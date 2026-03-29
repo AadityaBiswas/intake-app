@@ -52,6 +52,7 @@ class Food {
   final DateTime? createdAt;
   final String? preferredUnit; // Natural counting unit: "piece", "g", "ml", etc.
   final List<String>? validUnits; // Units that make sense for this food
+  final bool hasBeenRecalculated; // true after AI recalculation (blocks further recalcs)
 
   const Food({
     required this.id,
@@ -66,6 +67,7 @@ class Food {
     this.createdAt,
     this.preferredUnit,
     this.validUnits,
+    this.hasBeenRecalculated = false,
   });
 
   /// Dual-read factory: supports both new schema (`nutrition_per_100g` map)
@@ -122,6 +124,7 @@ class Food {
       validUnits: data['validUnits'] is List
           ? List<String>.from(data['validUnits'] as List)
           : null,
+      hasBeenRecalculated: data['hasBeenRecalculated'] == true,
     );
   }
 
@@ -140,6 +143,7 @@ class Food {
     };
     if (preferredUnit != null) map['preferredUnit'] = preferredUnit;
     if (validUnits != null && validUnits!.isNotEmpty) map['validUnits'] = validUnits;
+    if (hasBeenRecalculated) map['hasBeenRecalculated'] = true;
     return map;
   }
 
@@ -156,6 +160,7 @@ class Food {
     DateTime? createdAt,
     String? preferredUnit,
     List<String>? validUnits,
+    bool? hasBeenRecalculated,
   }) {
     return Food(
       id: id ?? this.id,
@@ -170,6 +175,7 @@ class Food {
       createdAt: createdAt ?? this.createdAt,
       preferredUnit: preferredUnit ?? this.preferredUnit,
       validUnits: validUnits ?? this.validUnits,
+      hasBeenRecalculated: hasBeenRecalculated ?? this.hasBeenRecalculated,
     );
   }
 

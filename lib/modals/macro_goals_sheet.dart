@@ -1,7 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/macro_calculator.dart';
+
+// ─── Design tokens ─────────────────────────────────────────────────────────────
+const _kBg = Color(0xFFF8FAFC);
+const _kBorder = Color(0xFFEEF2F7);
+const _kTextPrimary = Color(0xFF0D1117);
+const _kTextSecondary = Color(0xFF64748B);
+const _kTextTertiary = Color(0xFFB0BAC6);
+const _kHandle = Color(0xFFDDE3ED);
+const _kGreen = Color(0xFF22C55E);
 
 class MacroGoalsSheet extends StatefulWidget {
   const MacroGoalsSheet({super.key});
@@ -11,7 +21,7 @@ class MacroGoalsSheet extends StatefulWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.4),
+      barrierColor: Colors.black.withValues(alpha: 0.35),
       builder: (_) => const MacroGoalsSheet(),
     );
   }
@@ -24,49 +34,74 @@ class _MacroGoalsSheetState extends State<MacroGoalsSheet> {
   bool _loading = true;
   bool _saving = false;
   bool _recalculating = false;
+  bool _hasChanges = false;
+
+  late TextEditingController _calController;
+  late TextEditingController _proteinController;
+  late TextEditingController _carbsController;
+  late TextEditingController _fatController;
 
   int _calories = 2100;
-  // Store percentages as the primary source (0–100)
-  int _proteinPct = 30;
-  int _carbsPct = 45;
-  int _fatPct = 25;
+  int _protein = 160;
+  int _carbs = 250;
+  int _fat = 65;
 
-  // Derived gram values
-  int get _protein => (_calories * _proteinPct / 100 / 4).round();
-  int get _carbs => (_calories * _carbsPct / 100 / 4).round();
-  int get _fat => (_calories * _fatPct / 100 / 9).round();
+  int _origCalories = 2100;
+  int _origProtein = 160;
+  int _origCarbs = 250;
+  int _origFat = 65;
 
   @override
   void initState() {
     super.initState();
+    _calController = TextEditingController();
+    _proteinController = TextEditingController();
+    _carbsController = TextEditingController();
+    _fatController = TextEditingController();
     _loadGoals();
+  }
+
+  @override
+  void dispose() {
+    _calController.dispose();
+    _proteinController.dispose();
+    _carbsController.dispose();
+    _fatController.dispose();
+    super.dispose();
+  }
+
+  void _updateControllers() {
+    _calController.text = '$_calories';
+    _proteinController.text = '$_protein';
+    _carbsController.text = '$_carbs';
+    _fatController.text = '$_fat';
+  }
+
+  void _checkForChanges() {
+    final changed =
+        _calories != _origCalories ||
+        _protein != _origProtein ||
+        _carbs != _origCarbs ||
+        _fat != _origFat;
+    if (changed != _hasChanges) setState(() => _hasChanges = changed);
   }
 
   Future<void> _loadGoals() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .get();
+    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
     final data = doc.data() ?? {};
-
     if (mounted) {
-      final cal = (data['goal_calories'] as num?)?.toInt() ?? 2100;
-      final p = (data['goal_protein'] as num?)?.toInt() ?? 0;
-      final c = (data['goal_carbs'] as num?)?.toInt() ?? 0;
-      final f = (data['goal_fat'] as num?)?.toInt() ?? 0;
-
-      // Derive percentages from stored gram values
-      final totalMacroCal = (p * 4) + (c * 4) + (f * 9);
-      final base = totalMacroCal > 0 ? totalMacroCal : cal;
-
       setState(() {
-        _calories = cal;
-        _proteinPct = base > 0 ? ((p * 4) / base * 100).round() : 30;
-        _carbsPct = base > 0 ? ((c * 4) / base * 100).round() : 45;
-        _fatPct = base > 0 ? ((f * 9) / base * 100).round() : 25;
+        _calories = (data['goal_calories'] as num?)?.toInt() ?? 2100;
+        _protein = (data['goal_protein'] as num?)?.toInt() ?? 160;
+        _carbs = (data['goal_carbs'] as num?)?.toInt() ?? 250;
+        _fat = (data['goal_fat'] as num?)?.toInt() ?? 65;
+        _origCalories = _calories;
+        _origProtein = _protein;
+        _origCarbs = _carbs;
+        _origFat = _fat;
+        _updateControllers();
         _loading = false;
       });
     }
@@ -75,51 +110,62 @@ class _MacroGoalsSheetState extends State<MacroGoalsSheet> {
   Future<void> _save() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-
     setState(() => _saving = true);
-
     await FirebaseFirestore.instance.collection('users').doc(uid).set({
       'goal_protein': _protein,
       'goal_carbs': _carbs,
       'goal_fat': _fat,
       'goal_calories': _calories,
     }, SetOptions(merge: true));
-
     if (mounted) Navigator.pop(context);
   }
 
-  void _adjustPct(String macro, int delta) {
+  void _adjustMacro(String macro, int delta) {
+    HapticFeedback.selectionClick();
     setState(() {
       switch (macro) {
+        case 'calories':
+          _calories = (_calories + delta).clamp(800, 6000);
+          _calController.text = '$_calories';
         case 'protein':
-          _proteinPct = (_proteinPct + delta).clamp(5, 60);
+          _protein = (_protein + delta).clamp(0, 500);
+          _proteinController.text = '$_protein';
         case 'carbs':
-          _carbsPct = (_carbsPct + delta).clamp(5, 70);
+          _carbs = (_carbs + delta).clamp(0, 800);
+          _carbsController.text = '$_carbs';
         case 'fat':
-          _fatPct = (_fatPct + delta).clamp(5, 60);
+          _fat = (_fat + delta).clamp(0, 300);
+          _fatController.text = '$_fat';
       }
+      _checkForChanges();
     });
   }
 
-  void _adjustCalories(int delta) {
+  void _onFieldChanged(String macro, String value) {
+    final parsed = int.tryParse(value);
+    if (parsed == null) return;
     setState(() {
-      _calories = (_calories + delta).clamp(800, 6000);
+      switch (macro) {
+        case 'calories':
+          _calories = parsed.clamp(800, 6000);
+        case 'protein':
+          _protein = parsed.clamp(0, 500);
+        case 'carbs':
+          _carbs = parsed.clamp(0, 800);
+        case 'fat':
+          _fat = parsed.clamp(0, 300);
+      }
+      _checkForChanges();
     });
   }
 
   Future<void> _recalculateFromProfile() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-
     setState(() => _recalculating = true);
-
     try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
+      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
       final data = doc.data() ?? {};
-
       final result = MacroCalculator.calculate(
         gender: (data['gender'] as String? ?? '').toLowerCase(),
         age: (data['age'] as num?)?.toInt() ?? 25,
@@ -127,28 +173,17 @@ class _MacroGoalsSheetState extends State<MacroGoalsSheet> {
         heightCm: (data['height'] as num?)?.toDouble() ?? 170.0,
         activityLevel: data['activity_level'] as String? ?? 'Sedentary',
         weightGoal: data['weight_goal'] as String? ?? 'Maintain Weight',
+        goalIntensity: data['goal_intensity'] as String? ?? '',
       );
-
       if (mounted) {
-        final cal = result.targetCalories;
-        final totalMacroCal =
-            (result.proteinGrams * 4) +
-            (result.carbGrams * 4) +
-            (result.fatGrams * 9);
-        final base = totalMacroCal > 0 ? totalMacroCal : cal;
-
         setState(() {
-          _calories = cal;
-          _proteinPct = base > 0
-              ? ((result.proteinGrams * 4) / base * 100).round()
-              : 30;
-          _carbsPct = base > 0
-              ? ((result.carbGrams * 4) / base * 100).round()
-              : 45;
-          _fatPct = base > 0
-              ? ((result.fatGrams * 9) / base * 100).round()
-              : 25;
+          _calories = result.targetCalories;
+          _protein = result.proteinGrams;
+          _carbs = result.carbGrams;
+          _fat = result.fatGrams;
+          _updateControllers();
           _recalculating = false;
+          _checkForChanges();
         });
       }
     } catch (_) {
@@ -156,271 +191,284 @@ class _MacroGoalsSheetState extends State<MacroGoalsSheet> {
     }
   }
 
+  int get _macroCalories => (_protein * 4) + (_carbs * 4) + (_fat * 9);
+  int get _calorieDiff => _macroCalories - _calories;
+
   @override
   Widget build(BuildContext context) {
     return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.85,
+      ),
       decoration: const BoxDecoration(
-        color: Color(0xFFF6F7F9),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         boxShadow: [
           BoxShadow(
-            color: Color(0x26000000),
+            color: Color(0x1A000000),
             blurRadius: 40,
-            offset: Offset(0, -8),
+            offset: Offset(0, -4),
           ),
         ],
       ),
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
       child: _loading
-          ? const SizedBox(
+          ? SizedBox(
               height: 200,
               child: Center(
-                child: CircularProgressIndicator(color: Color(0xFF22C55E)),
+                child: CircularProgressIndicator(
+                  color: _kGreen,
+                  strokeWidth: 2,
+                ),
               ),
             )
           : Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Handle
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFCBD5E1),
-                      borderRadius: BorderRadius.circular(999),
+                Padding(
+                  padding: const EdgeInsets.only(top: 14),
+                  child: Center(
+                    child: Container(
+                      width: 40,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: _kHandle,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
-                // Title + close
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Macro Goals',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF0F172A),
-                        letterSpacing: -0.5,
-                      ),
+                // Content
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: EdgeInsets.fromLTRB(
+                      24, 20, 24,
+                      24 + MediaQuery.of(context).viewInsets.bottom,
                     ),
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        width: 32,
-                        height: 32,
-                        decoration: const BoxDecoration(
-                          color: Color(0x99E2E8F0),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.close,
-                          size: 20,
-                          color: Color(0xFF64748B),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Macros card (protein, carbs, fat)
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFF1F5F9)),
-                  ),
-                  child: Column(
-                    children: [
-                      _MacroRow(
-                        label: 'Protein',
-                        grams: _protein,
-                        percent: _proteinPct,
-                        icon: Icons.fitness_center_rounded,
-                        onIncrement: () => _adjustPct('protein', 1),
-                        onDecrement: () => _adjustPct('protein', -1),
-                      ),
-                      const Divider(
-                        height: 1,
-                        indent: 52,
-                        color: Color(0xFFF1F5F9),
-                      ),
-                      _MacroRow(
-                        label: 'Carbs',
-                        grams: _carbs,
-                        percent: _carbsPct,
-                        icon: Icons.grain_rounded,
-                        onIncrement: () => _adjustPct('carbs', 1),
-                        onDecrement: () => _adjustPct('carbs', -1),
-                      ),
-                      const Divider(
-                        height: 1,
-                        indent: 52,
-                        color: Color(0xFFF1F5F9),
-                      ),
-                      _MacroRow(
-                        label: 'Fat',
-                        grams: _fat,
-                        percent: _fatPct,
-                        icon: Icons.water_drop_outlined,
-                        onIncrement: () => _adjustPct('fat', 1),
-                        onDecrement: () => _adjustPct('fat', -1),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Calories card
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFF1F5F9)),
-                  ),
-                  child: _MacroRow(
-                    label: 'Calories',
-                    grams: _calories,
-                    percent: null,
-                    icon: Icons.local_fire_department_rounded,
-                    unit: 'kcal',
-                    onIncrement: () => _adjustCalories(50),
-                    onDecrement: () => _adjustCalories(-50),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Auto-calculate button
-                GestureDetector(
-                  onTap: _recalculating ? null : _recalculateFromProfile,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFF1F5F9)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        _recalculating
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 1.5,
-                                  color: Color(0xFF22C55E),
-                                ),
-                              )
-                            : const Icon(
-                                Icons.refresh_rounded,
-                                size: 16,
-                                color: Color(0xFF22C55E),
+                        // Title + close
+                        Row(
+                          children: [
+                            const Text(
+                              'Macro Goals',
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.w800,
+                                color: _kTextPrimary,
+                                letterSpacing: -0.8,
                               ),
-                        const SizedBox(width: 8),
+                            ),
+                            const Spacer(),
+                            GestureDetector(
+                              onTap: () => Navigator.pop(context),
+                              behavior: HitTestBehavior.opaque,
+                              child: Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: _kBg,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: _kBorder, width: 1),
+                                ),
+                                child: const Icon(
+                                  Icons.close_rounded,
+                                  size: 18,
+                                  color: _kTextSecondary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
                         const Text(
-                          'Auto-calculate from profile',
+                          'Adjust your daily nutrition targets',
                           style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFF22C55E),
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: _kTextTertiary,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
+                        const SizedBox(height: 20),
 
-                // Save button
-                GestureDetector(
-                  onTap: _saving ? null : _save,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: _saving
-                          ? const Color(0xFF22C55E).withValues(alpha: 0.6)
-                          : const Color(0xFF22C55E),
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF22C55E).withValues(alpha: 0.2),
-                          blurRadius: 12,
-                          offset: const Offset(0, 4),
+                        _buildMacroEditRow(
+                          label: 'Daily Calories',
+                          value: _calories,
+                          unit: 'kcal',
+                          color: const Color(0xFFF59E0B),
+                          icon: Icons.local_fire_department_rounded,
+                          controller: _calController,
+                          step: 50,
+                          macro: 'calories',
+                        ),
+                        const SizedBox(height: 10),
+                        _buildMacroEditRow(
+                          label: 'Protein',
+                          value: _protein,
+                          unit: 'g',
+                          color: _kGreen,
+                          icon: Icons.egg_rounded,
+                          controller: _proteinController,
+                          step: 5,
+                          macro: 'protein',
+                        ),
+                        const SizedBox(height: 10),
+                        _buildMacroEditRow(
+                          label: 'Carbs',
+                          value: _carbs,
+                          unit: 'g',
+                          color: const Color(0xFF3B82F6),
+                          icon: Icons.grain_rounded,
+                          controller: _carbsController,
+                          step: 5,
+                          macro: 'carbs',
+                        ),
+                        const SizedBox(height: 10),
+                        _buildMacroEditRow(
+                          label: 'Fat',
+                          value: _fat,
+                          unit: 'g',
+                          color: const Color(0xFFF59E0B),
+                          icon: Icons.water_drop_rounded,
+                          controller: _fatController,
+                          step: 5,
+                          macro: 'fat',
+                        ),
+                        const SizedBox(height: 14),
+
+                        _buildCalorieBalance(),
+                        const SizedBox(height: 14),
+
+                        // Auto-calculate
+                        GestureDetector(
+                          onTap: _recalculating ? null : _recalculateFromProfile,
+                          behavior: HitTestBehavior.opaque,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            decoration: BoxDecoration(
+                              color: _kBg,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: _kBorder),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _recalculating
+                                    ? const SizedBox(
+                                        width: 15,
+                                        height: 15,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 1.5,
+                                          color: _kGreen,
+                                        ),
+                                      )
+                                    : const Icon(
+                                        Icons.refresh_rounded,
+                                        size: 15,
+                                        color: _kGreen,
+                                      ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'Auto-calculate from profile',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: _kGreen,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Save button
+                        GestureDetector(
+                          onTap: (_saving || !_hasChanges) ? null : _save,
+                          behavior: HitTestBehavior.opaque,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            height: 54,
+                            decoration: BoxDecoration(
+                              color: _hasChanges
+                                  ? (_saving
+                                      ? _kGreen.withValues(alpha: 0.6)
+                                      : _kGreen)
+                                  : const Color(0xFFE2E8F0),
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: _hasChanges
+                                  ? [
+                                      BoxShadow(
+                                        color: _kGreen.withValues(alpha: 0.25),
+                                        blurRadius: 16,
+                                        offset: const Offset(0, 6),
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                            alignment: Alignment.center,
+                            child: _saving
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Text(
+                                    'Save Goals',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700,
+                                      color: _hasChanges
+                                          ? Colors.white
+                                          : _kTextSecondary,
+                                      letterSpacing: -0.2,
+                                    ),
+                                  ),
+                          ),
                         ),
                       ],
                     ),
-                    alignment: Alignment.center,
-                    child: _saving
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Text(
-                            'Save Goals',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
-                          ),
                   ),
                 ),
               ],
             ),
     );
   }
-}
 
-// ─── Macro Row Widget ───────────────────────────────────────────────
-
-class _MacroRow extends StatelessWidget {
-  final String label;
-  final int grams;
-  final int? percent;
-  final IconData icon;
-  final String unit;
-  final VoidCallback onIncrement;
-  final VoidCallback onDecrement;
-
-  const _MacroRow({
-    required this.label,
-    required this.grams,
-    required this.percent,
-    required this.icon,
-    this.unit = 'g',
-    required this.onIncrement,
-    required this.onDecrement,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+  Widget _buildMacroEditRow({
+    required String label,
+    required int value,
+    required String unit,
+    required Color color,
+    required IconData icon,
+    required TextEditingController controller,
+    required int step,
+    required String macro,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: _kBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _kBorder),
+      ),
       child: Row(
         children: [
           Container(
-            width: 28,
-            height: 28,
+            width: 36,
+            height: 36,
             decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(8),
+              color: color.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, size: 16, color: const Color(0xFF64748B)),
+            child: Icon(icon, size: 18, color: color),
           ),
           const SizedBox(width: 12),
-          // Label + grams
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -428,72 +476,182 @@ class _MacroRow extends StatelessWidget {
                 Text(
                   label,
                   style: const TextStyle(
-                    fontSize: 16,
+                    fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: Color(0xFF0F172A),
+                    color: _kTextPrimary,
                     letterSpacing: -0.2,
                   ),
                 ),
-                Text(
-                  '$grams $unit',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF94A3B8),
+                if (macro != 'calories')
+                  Text(
+                    '${value * (macro == 'fat' ? 9 : 4)} kcal',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: _kTextTertiary,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
-          // Percentage badge (if applicable)
-          if (percent != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              margin: const EdgeInsets.only(right: 12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _StepButton(
+                icon: Icons.remove_rounded,
+                onTap: () => _adjustMacro(macro, -step),
               ),
-              child: Text(
-                '$percent%',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF0F172A),
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 65,
+                child: TextField(
+                  controller: controller,
+                  textAlign: TextAlign.center,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(5),
+                  ],
+                  decoration: InputDecoration(
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 8,
+                    ),
+                    isDense: true,
+                    filled: true,
+                    fillColor: Colors.white,
+                    suffixText: unit,
+                    suffixStyle: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: color.withValues(alpha: 0.6),
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: color.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(color: _kBorder),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: color, width: 1.5),
+                    ),
+                  ),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: color,
+                    letterSpacing: -0.3,
+                  ),
+                  onChanged: (v) => _onFieldChanged(macro, v),
                 ),
               ),
-            ),
-          // +/- buttons
-          GestureDetector(
-            onTap: onDecrement,
-            child: Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(8),
+              const SizedBox(width: 6),
+              _StepButton(
+                icon: Icons.add_rounded,
+                onTap: () => _adjustMacro(macro, step),
               ),
-              child: const Icon(
-                Icons.remove,
-                size: 16,
-                color: Color(0xFF64748B),
-              ),
-            ),
+            ],
           ),
-          const SizedBox(width: 6),
-          GestureDetector(
-            onTap: onIncrement,
-            child: Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(8),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCalorieBalance() {
+    final diff = _calorieDiff;
+    final isBalanced = diff.abs() <= 50;
+    final isOver = diff > 50;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: isBalanced
+            ? const Color(0xFFECFDF5)
+            : isOver
+                ? const Color(0xFFFEF2F2)
+                : const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isBalanced
+              ? _kGreen.withValues(alpha: 0.3)
+              : isOver
+                  ? const Color(0xFFEF4444).withValues(alpha: 0.3)
+                  : const Color(0xFFF59E0B).withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isBalanced ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+            size: 16,
+            color: isBalanced
+                ? _kGreen
+                : isOver
+                    ? const Color(0xFFEF4444)
+                    : const Color(0xFFF59E0B),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: RichText(
+              text: TextSpan(
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: isBalanced
+                      ? const Color(0xFF166534)
+                      : isOver
+                          ? const Color(0xFF991B1B)
+                          : const Color(0xFF92400E),
+                  height: 1.4,
+                ),
+                children: [
+                  TextSpan(
+                    text: 'Macro total: $_macroCalories kcal',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  if (!isBalanced)
+                    TextSpan(
+                      text: isOver
+                          ? ' (+$diff over target)'
+                          : ' (${diff.abs()} under target)',
+                    ),
+                  if (isBalanced) const TextSpan(text: ' — balanced ✓'),
+                ],
               ),
-              child: const Icon(Icons.add, size: 16, color: Color(0xFF64748B)),
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _StepButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _StepButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(9),
+          border: Border.all(color: _kBorder),
+        ),
+        child: Icon(icon, size: 15, color: _kTextSecondary),
       ),
     );
   }

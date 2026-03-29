@@ -4,7 +4,13 @@
       "Bash(flutter analyze lib/widgets/macro_card.dart)",
       "Bash(cmd /c \"cd /d d:\\\\apps\\\\intake\\\\intake-app && flutter analyze lib/widgets/macro_card.dart 2>&1\")",
       "Bash(cmd /c \"cd /d d:\\\\apps\\\\intake\\\\intake-app && flutter analyze lib/widgets/macro_card.dart\")",
-      "Bash(cmd /c \"cd /d d:\\\\apps\\\\intake\\\\intake-app && flutter analyze lib/widgets/macro_card.dart 2>&1 & echo EXIT:%errorlevel%\")"
+      "Bash(cmd /c \"cd /d d:\\\\apps\\\\intake\\\\intake-app && flutter analyze lib/widgets/macro_card.dart 2>&1 & echo EXIT:%errorlevel%\")",
+      "Bash(flutter analyze lib/screens/home_screen.dart lib/widgets/smart_food_input.dart lib/services/food_service.dart lib/services/food_cache_service.dart)",
+      "Bash(D:/flutter/bin/flutter analyze lib/screens/home_screen.dart lib/widgets/smart_food_input.dart lib/services/food_service.dart lib/services/food_cache_service.dart)",
+      "Bash(npx eslint index.js)",
+      "Bash(D:/flutter/bin/flutter analyze lib/widgets/smart_food_input.dart)",
+      "Bash(D:/flutter/bin/flutter analyze lib/widgets/food_list_item.dart lib/screens/home_screen.dart)",
+      "Bash(D:/flutter/bin/flutter analyze lib/services/food_cache_service.dart)"
     ]
   }
 }

@@ -1,5 +1,5 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 enum MacroType { protein, carbs, fats, calories }
@@ -13,11 +13,15 @@ class _MacroMeta {
 }
 
 const Map<MacroType, _MacroMeta> _macroMeta = {
-  MacroType.protein: _MacroMeta('PROTEIN', Color(0xFF22C55E), 'g'),
-  MacroType.carbs: _MacroMeta('CARBS', Color(0xFFF59E0B), 'g'),
-  MacroType.fats: _MacroMeta('FATS', Color(0xFFEF4444), 'g'),
-  MacroType.calories: _MacroMeta('CALS', Color(0xFF94A3B8), ''),
+  MacroType.protein: _MacroMeta('Protein', Color(0xFF22C55E), 'g'),
+  MacroType.carbs: _MacroMeta('Carbs', Color(0xFF3B82F6), 'g'),
+  MacroType.fats: _MacroMeta('Fat', Color(0xFFF59E0B), 'g'),
+  MacroType.calories: _MacroMeta('Calories', Color(0xFF94A3B8), 'kcal'),
 };
+
+const _kInactiveLabelColor = Color(0xFFB0BAC6);
+const _kInactiveValueColor = Color(0xFF64748B);
+const _kTrackColor = Color(0xFFF1F5F9);
 
 class MacroCard extends StatefulWidget {
   final int protein;
@@ -54,48 +58,39 @@ class MacroCard extends StatefulWidget {
 }
 
 class _MacroCardState extends State<MacroCard> {
-  bool _tapExpanded = false;
-  Timer? _interactionTimer;
+  bool _userExpanded = false;
+  bool _macroSelected = false;
 
-  bool get _isEffectivelyCollapsed => widget.isCollapsed && !_tapExpanded;
+  bool get _showExpanded => _userExpanded && !widget.isCollapsed;
 
   @override
   void didUpdateWidget(MacroCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!oldWidget.isCollapsed && widget.isCollapsed) {
-      // Collapsed via scroll — drop tap override.
-      _tapExpanded = false;
-      _interactionTimer?.cancel();
+      setState(() => _userExpanded = false);
     }
     if (oldWidget.expansionResetKey != widget.expansionResetKey) {
-      // External force-collapse (e.g. food input focused) — drop tap override
-      // even if isCollapsed was already true.
-      _tapExpanded = false;
-      _interactionTimer?.cancel();
+      setState(() {
+        _userExpanded = false;
+        _macroSelected = false;
+      });
     }
   }
 
-  @override
-  void dispose() {
-    _interactionTimer?.cancel();
-    super.dispose();
+  void _expand() {
+    HapticFeedback.selectionClick();
+    setState(() => _userExpanded = true);
   }
 
-  void _onInteract() {
-    if (widget.isCollapsed) {
-      setState(() => _tapExpanded = true);
-    }
-    _interactionTimer?.cancel();
-    _interactionTimer = Timer(const Duration(seconds: 30), () {
-      if (mounted && _tapExpanded) {
-        setState(() => _tapExpanded = false);
-      }
-    });
+  void _collapse() {
+    HapticFeedback.selectionClick();
+    setState(() => _userExpanded = false);
   }
 
-  void _onMiniTap(MacroType type) {
+  void _onMacroTap(MacroType type) {
+    HapticFeedback.selectionClick();
+    setState(() => _macroSelected = true);
     widget.onActiveMacroChanged(type);
-    _onInteract();
   }
 
   int _valueFor(MacroType type) {
@@ -129,327 +124,439 @@ class _MacroCardState extends State<MacroCard> {
     return goal > 0 ? (_valueFor(type) / goal).clamp(0.0, 1.0) : 0.0;
   }
 
-  List<MacroType> get _inactiveMacros =>
-      MacroType.values.where((m) => m != widget.activeMacro).toList();
-
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: _isEffectivelyCollapsed ? _onInteract : null,
-      onPanDown: (_) {
-        if (!_isEffectivelyCollapsed) _onInteract();
-      },
-      behavior: HitTestBehavior.opaque,
+    return TapRegion(
+      onTapOutside: _showExpanded ? (_) => _collapse() : null,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 350),
+        duration: const Duration(milliseconds: 300),
         curve: Curves.fastOutSlowIn,
-        margin: EdgeInsets.symmetric(
-          horizontal: 24,
-          vertical: _isEffectivelyCollapsed ? 12 : 8,
-        ),
-        padding: EdgeInsets.fromLTRB(
-          20,
-          _isEffectivelyCollapsed ? 12 : 10,
-          20,
-          10,
-        ),
+        margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
         decoration: BoxDecoration(
-          color: const Color(0xFFFAFAFB),
-          borderRadius: BorderRadius.circular(
-            _isEffectivelyCollapsed ? 20 : 24,
-          ),
-          border: Border.all(color: const Color(0xFFF0F0F2), width: 1),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
           boxShadow: const [
             BoxShadow(
-              color: Color(0x08000000),
-              blurRadius: 20,
-              offset: Offset(0, 6),
-              spreadRadius: 0,
+              color: Color(0x09000000),
+              blurRadius: 16,
+              offset: Offset(0, 3),
             ),
           ],
         ),
         child: AnimatedSize(
-          duration: const Duration(milliseconds: 350),
+          duration: const Duration(milliseconds: 340),
           curve: Curves.fastOutSlowIn,
           alignment: Alignment.topCenter,
-          child: AnimatedCrossFade(
-            firstChild: _buildCollapsedState(),
-            secondChild: _buildExpandedState(),
-            crossFadeState: _isEffectivelyCollapsed
-                ? CrossFadeState.showFirst
-                : CrossFadeState.showSecond,
-            duration: const Duration(milliseconds: 250),
-            firstCurve: Curves.easeOut,
-            secondCurve: Curves.easeIn,
-            sizeCurve: Curves.fastOutSlowIn,
-          ),
+          child: _showExpanded ? _buildExpandedState() : _buildCollapsedState(),
         ),
       ),
     );
   }
 
-  // ─── Collapsed State ─────────────────────────────────────────────
+  // ─── Collapsed ────────────────────────────────────────────────────
 
   Widget _buildCollapsedState() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Expanded(child: _buildMiniStat(MacroType.calories)),
-        Container(width: 1, height: 24, color: const Color(0xFFE8E8EC)),
-        Expanded(child: _buildMiniStat(MacroType.protein)),
-        Container(width: 1, height: 24, color: const Color(0xFFE8E8EC)),
-        Expanded(child: _buildMiniStat(MacroType.carbs)),
-        Container(width: 1, height: 24, color: const Color(0xFFE8E8EC)),
-        Expanded(child: _buildMiniStat(MacroType.fats)),
-      ],
-    );
-  }
-
-  Widget _buildMiniStat(MacroType type) {
-    final meta = _macroMeta[type]!;
-    final value = _valueFor(type);
+    final cal = _valueFor(MacroType.calories);
+    final calGoal = _goalFor(MacroType.calories);
+    final calOver = cal > calGoal;
 
     return GestureDetector(
-      onTap: () => _onMiniTap(type),
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                '$value',
-                style: GoogleFonts.inter(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF2D3038),
-                  height: 1.1,
-                  letterSpacing: -0.5,
-                ),
-              ),
-              if (meta.unit.isNotEmpty)
-                Text(
-                  meta.unit,
-                  style: GoogleFonts.inter(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: const Color(0xFF94A3B8),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 1),
-          Text(
-            meta.label,
-            style: GoogleFonts.inter(
-              fontSize: 9,
-              fontWeight: FontWeight.w700,
-              color: const Color(0xFFB0B4BC),
-              letterSpacing: 1.2,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ─── Expanded State ──────────────────────────────────────────────
-
-  Widget _buildExpandedState() {
-    final active = widget.activeMacro;
-    final meta = _macroMeta[active]!;
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildHeroSection(active, meta),
-        const SizedBox(height: 8),
-        Container(height: 0.5, color: const Color(0xFFE8E8EC)),
-        const SizedBox(height: 4),
-        _buildStatsRow(),
-      ],
-    );
-  }
-
-  Widget _buildHeroSection(MacroType active, _MacroMeta meta) {
-    final value = _valueFor(active);
-    final goal = _goalFor(active);
-    final progress = _progressFor(active);
-
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 250),
-      switchInCurve: Curves.easeInOut,
-      switchOutCurve: Curves.easeInOut,
-      transitionBuilder: (child, animation) {
-        return FadeTransition(opacity: animation, child: child);
-      },
-      child: Column(
-        key: ValueKey(active),
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              TweenAnimationBuilder<int>(
-                tween: IntTween(begin: 0, end: value),
-                duration: const Duration(milliseconds: 150),
-                curve: Curves.easeOut,
-                builder: (context, animatedValue, _) {
-                  return Text(
-                    '$animatedValue',
-                    style: GoogleFonts.inter(
-                      fontSize: 40,
-                      fontWeight: FontWeight.w700,
-                      color: meta.color,
-                      height: 1,
-                      letterSpacing: -2,
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(width: 8),
-              Text(
-                meta.label,
-                style: GoogleFonts.inter(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFFB0B4BC),
-                  letterSpacing: 1.8,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '/ $goal',
-                style: GoogleFonts.inter(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: const Color(0xFFCBCDD3),
-                  letterSpacing: -0.3,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 5),
-          // Progress bar
-          Container(
-            height: 3,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: const Color(0xFFEEEFF2),
-              borderRadius: BorderRadius.circular(999),
-            ),
-            child: AnimatedAlign(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
-              alignment: Alignment.centerLeft,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                curve: Curves.easeInOut,
-                width: double.infinity,
-                child: FractionallySizedBox(
-                  alignment: Alignment.centerLeft,
-                  widthFactor: progress,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
-                    curve: Curves.easeInOut,
-                    decoration: BoxDecoration(
-                      color: meta.color,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatsRow() {
-    final inactive = _inactiveMacros;
-
-    return IntrinsicHeight(
-      child: Row(
-        children: [
-          for (int i = 0; i < inactive.length; i++) ...[
-            if (i > 0)
-              Container(
-                width: 0.5,
-                margin: const EdgeInsets.symmetric(vertical: 3),
-                color: const Color(0xFFE8E8EC),
-              ),
-            Expanded(child: _buildStatItem(inactive[i])),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatItem(MacroType type) {
-    final meta = _macroMeta[type]!;
-    final value = _valueFor(type);
-    final suffix = meta.unit;
-
-    return GestureDetector(
-      onTap: () {
-        widget.onActiveMacroChanged(type);
-        _onInteract();
-      },
+      onTap: _expand,
       behavior: HitTestBehavior.opaque,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(
-              meta.label,
-              style: GoogleFonts.inter(
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFFB0B4BC),
-                letterSpacing: 1.6,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
+            // ── Calories hero (left, dominant) ──
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                TweenAnimationBuilder<int>(
-                  tween: IntTween(begin: 0, end: value),
-                  duration: const Duration(milliseconds: 150),
-                  curve: Curves.easeOut,
-                  builder: (context, animatedValue, _) {
-                    return Text(
-                      '$animatedValue',
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      '$cal',
                       style: GoogleFonts.inter(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF2D3038),
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF0F172A),
+                        height: 1,
+                        letterSpacing: -1.2,
                       ),
-                    );
-                  },
-                ),
-                if (suffix.isNotEmpty)
-                  Text(
-                    suffix,
-                    style: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w400,
-                      color: const Color(0xFFB0B4BC),
                     ),
+                    const SizedBox(width: 3),
+                    Text(
+                      'cal',
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                        color: const Color(0xFFB0BAC6),
+                        letterSpacing: 0,
+                      ),
+                    ),
+                    if (calOver) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF2F2),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          '+${cal - calGoal}',
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: const Color(0xFFEF4444),
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  'of $calGoal kcal',
+                  style: GoogleFonts.inter(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w400,
+                    color: const Color(0xFFCBD5E0),
+                    letterSpacing: 0,
                   ),
+                ),
+              ],
+            ),
+
+            const Spacer(),
+
+            // ── Thin rule ──
+            Container(width: 1, height: 32, color: const Color(0xFFEEF2F7)),
+            const SizedBox(width: 16),
+
+            // ── Protein / Carbs / Fat compact cluster (right) ──
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildCompactMacro(MacroType.protein),
+                const SizedBox(width: 14),
+                _buildCompactMacro(MacroType.carbs),
+                const SizedBox(width: 14),
+                _buildCompactMacro(MacroType.fats),
               ],
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildCompactMacro(MacroType type) {
+    final meta = _macroMeta[type]!;
+    final value = _valueFor(type);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              '$value',
+              style: GoogleFonts.inter(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF334155),
+                height: 1,
+                letterSpacing: -0.4,
+              ),
+            ),
+            Text(
+              meta.unit,
+              style: GoogleFonts.inter(
+                fontSize: 9,
+                fontWeight: FontWeight.w500,
+                color: const Color(0xFFB0BAC6),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          meta.label.toUpperCase(),
+          style: GoogleFonts.inter(
+            fontSize: 7,
+            fontWeight: FontWeight.w700,
+            color: const Color(0xFFD1D9E0),
+            letterSpacing: 0.6,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─── Expanded ─────────────────────────────────────────────────────
+
+  Widget _buildExpandedState() {
+    final calValue = _valueFor(MacroType.calories);
+    final calGoal = _goalFor(MacroType.calories);
+    final calProgress = _progressFor(MacroType.calories);
+    final calIsOver = calValue > calGoal;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ── Calories hero row (display only — not selectable) ──
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      '$calValue',
+                      style: GoogleFonts.inter(
+                        fontSize: 44,
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF0F172A),
+                        height: 1,
+                        letterSpacing: -2,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 3),
+                      child: Text(
+                        'cal',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFFB0BAC6),
+                        ),
+                      ),
+                    ),
+                    if (calIsOver) ...[
+                      const SizedBox(width: 8),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF2F2),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            '+${calValue - calGoal}',
+                            style: GoogleFonts.inter(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFFEF4444),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const Spacer(),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Text(
+                        '/ $calGoal',
+                        style: GoogleFonts.inter(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w400,
+                          color: const Color(0xFFCBD5E0),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                _ProgressBar(
+                  progress: calProgress,
+                  color: const Color(0xFFDDE3EA),
+                  height: 3,
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
+          Container(height: 1, color: const Color(0xFFF1F5F9)),
+          const SizedBox(height: 4),
+
+          // ── Macro rows ──
+          for (final type in [MacroType.protein, MacroType.carbs, MacroType.fats])
+            _buildMacroRow(type),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMacroRow(MacroType type) {
+    final meta = _macroMeta[type]!;
+    final value = _valueFor(type);
+    final goal = _goalFor(type);
+    final progress = _progressFor(type);
+    final isActive = _macroSelected && widget.activeMacro == type;
+    final isOver = value > goal;
+
+    return GestureDetector(
+      onTap: () => _onMacroTap(type),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        decoration: BoxDecoration(
+          color: isActive
+              ? meta.color.withValues(alpha: 0.06)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 5,
+              height: 5,
+              decoration: BoxDecoration(
+                color: isActive ? meta.color : const Color(0xFFDDE3EA),
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 10),
+            SizedBox(
+              width: 58,
+              child: AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 200),
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                  color: isActive
+                      ? meta.color.withValues(alpha: 0.85)
+                      : _kInactiveLabelColor,
+                  letterSpacing: -0.1,
+                ),
+                child: Text(meta.label),
+              ),
+            ),
+            Expanded(
+              child: _ProgressBar(
+                progress: progress,
+                color: isActive ? meta.color : const Color(0xFFE8EDF2),
+                height: 3,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 200),
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: isActive ? meta.color : _kInactiveValueColor,
+                    letterSpacing: -0.3,
+                  ),
+                  child: Text('$value'),
+                ),
+                AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 200),
+                  style: GoogleFonts.inter(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w500,
+                    color: (isActive ? meta.color : _kInactiveValueColor)
+                        .withValues(alpha: 0.4),
+                  ),
+                  child: Text(meta.unit),
+                ),
+              ],
+            ),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 150),
+              child: (isOver && isActive)
+                  ? Container(
+                      key: const ValueKey('over'),
+                      margin: const EdgeInsets.only(left: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: Text(
+                        '+${value - goal}',
+                        style: GoogleFonts.inter(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFFEF4444),
+                        ),
+                      ),
+                    )
+                  : const SizedBox(key: ValueKey('none'), width: 0),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Progress bar ──────────────────────────────────────────────────
+
+class _ProgressBar extends StatelessWidget {
+  final double progress;
+  final Color color;
+  final double height;
+
+  const _ProgressBar({
+    required this.progress,
+    required this.color,
+    this.height = 3,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Stack(
+          children: [
+            Container(
+              height: height,
+              decoration: BoxDecoration(
+                color: _kTrackColor,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 350),
+              curve: Curves.easeOut,
+              height: height,
+              width: constraints.maxWidth * progress,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

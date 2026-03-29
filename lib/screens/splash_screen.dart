@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'home_screen.dart';
 import 'onboarding/onboarding_login_screen.dart';
-import 'onboarding/name_screen.dart';
-import 'onboarding/onboarding_data.dart';
+import 'onboarding/onboarding_coordinator.dart';
 import '../services/user_service.dart';
-import '../widgets/layered_page_route.dart';
+import '../widgets/onboarding_page_route.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -52,15 +51,13 @@ class _SplashScreenState extends State<SplashScreen>
       if (profile != null && profile.isOnboardingComplete) {
         nextScreen = const HomeScreen();
       } else {
-        // Incomplete onboarding → restart from name step
-        nextScreen = NameScreen(data: OnboardingData());
+        // Incomplete onboarding → new coordinator flow
+        nextScreen = const OnboardingCoordinator();
       }
     }
 
     if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      layeredRoute(nextScreen),
-    );
+    Navigator.of(context).pushReplacement(onboardingRoute(nextScreen));
   }
 
   @override

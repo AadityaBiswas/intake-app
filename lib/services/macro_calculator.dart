@@ -1,8 +1,8 @@
 /// Evidence-based macro calculation engine.
 ///
 /// Uses Mifflin-St Jeor BMR, activity multipliers,
-/// goal-based calorie adjustments, dynamic protein per kg,
-/// percentage-based fat, and remainder carbs.
+/// goal-based calorie adjustments with intensity support,
+/// dynamic protein per kg, percentage-based fat, and remainder carbs.
 class MacroCalculator {
   MacroCalculator._();
 
@@ -14,6 +14,7 @@ class MacroCalculator {
     required double heightCm,
     required String activityLevel,
     required String weightGoal,
+    String goalIntensity = '', // 'Mild', 'Moderate', 'Aggressive'
   }) {
     // ── Step 1: BMR (Mifflin-St Jeor) ──
     final double bmr;
@@ -32,61 +33,39 @@ class MacroCalculator {
         activityMultiplier = 1.55;
       case 'Very Active':
         activityMultiplier = 1.725;
+      case 'Athlete':
+        activityMultiplier = 1.9;
       default: // Sedentary
         activityMultiplier = 1.2;
     }
     final double maintenance = bmr * activityMultiplier;
 
-    // ── Step 3: Calorie adjustment ──
-    final double calorieAdjustment;
-    final String goalNormalized = _normalizeGoal(weightGoal);
-    switch (goalNormalized) {
-      case 'lose':
-        calorieAdjustment = -300;
-      case 'lean_bulk':
-        calorieAdjustment = 250;
-      case 'aggressive_bulk':
-        calorieAdjustment = 450;
-      default: // maintain
-        calorieAdjustment = 0;
-    }
-    final double targetCalories =
-        (maintenance + calorieAdjustment).clamp(1200, 5000);
+    // ── Step 3: Calorie adjustment (now intensity-aware) ──
+    final double calorieAdjustment = _getCalorieAdjustment(
+      weightGoal,
+      goalIntensity,
+    );
+    final double targetCalories = (maintenance + calorieAdjustment).clamp(
+      1200,
+      5000,
+    );
 
     // ── Step 4: Dynamic protein (g/kg bodyweight) ──
-    final double proteinMultiplier;
-    switch (goalNormalized) {
-      case 'lose':
-        proteinMultiplier = 2.2;
-      case 'lean_bulk':
-        proteinMultiplier = 2.0;
-      case 'aggressive_bulk':
-        proteinMultiplier = 1.9;
-      default: // maintain
-        proteinMultiplier = 1.8;
-    }
+    final double proteinMultiplier = _getProteinMultiplier(
+      weightGoal,
+      goalIntensity,
+    );
     final double proteinGrams = weightKg * proteinMultiplier;
     final double proteinCalories = proteinGrams * 4;
 
     // ── Step 5: Fat allocation (% of total calories) ──
-    final double fatPercent;
-    switch (goalNormalized) {
-      case 'lose':
-        fatPercent = 0.28;
-      case 'lean_bulk':
-        fatPercent = 0.25;
-      case 'aggressive_bulk':
-        fatPercent = 0.23;
-      default: // maintain
-        fatPercent = 0.27;
-    }
+    final double fatPercent = _getFatPercent(weightGoal, goalIntensity);
     final double fatCalories = targetCalories * fatPercent;
     final double fatGrams = fatCalories / 9;
 
     // ── Step 6: Carbohydrates (remainder) ──
     final double carbCalories = targetCalories - proteinCalories - fatCalories;
-    final double carbGrams =
-        carbCalories > 0 ? carbCalories / 4 : 0;
+    final double carbGrams = carbCalories > 0 ? carbCalories / 4 : 0;
 
     return MacroResult(
       bmr: bmr,
@@ -100,15 +79,129 @@ class MacroCalculator {
     );
   }
 
-  /// Normalize free-form goal strings to internal keys.
-  static String _normalizeGoal(String goal) {
-    final g = goal.toLowerCase().trim();
-    if (g.contains('lose')) return 'lose';
-    if (g.contains('aggressive') || g.contains('bulk') && g.contains('aggr')) {
-      return 'aggressive_bulk';
+  /// BMI calculation
+  static double calculateBMI(double weightKg, double heightCm) {
+    final heightM = heightCm / 100;
+    return weightKg / (heightM * heightM);
+  }
+
+  /// Calorie adjustment based on goal + intensity
+  static double _getCalorieAdjustment(String goal, String intensity) {
+    final g = goal.toLowerCase();
+    final i = intensity.toLowerCase();
+
+    if (g.contains('loss') || g.contains('lose')) {
+      switch (i) {
+        case 'mild':
+          return -250;
+        case 'moderate':
+          return -400;
+        case 'aggressive':
+          return -600;
+        default:
+          return -300; // default moderate deficit
+      }
+    } else if (g.contains('gain')) {
+      switch (i) {
+        case 'mild':
+          return 200;
+        case 'moderate':
+          return 350;
+        case 'aggressive':
+          return 500;
+        default:
+          return 250; // default lean bulk
+      }
     }
-    if (g.contains('lean') || g.contains('gain')) return 'lean_bulk';
-    return 'maintain';
+    return 0; // maintenance
+  }
+
+  /// Protein multiplier based on goal + intensity
+  static double _getProteinMultiplier(String goal, String intensity) {
+    final g = goal.toLowerCase();
+    final i = intensity.toLowerCase();
+
+    if (g.contains('loss') || g.contains('lose')) {
+      switch (i) {
+        case 'mild':
+          return 2.0;
+        case 'moderate':
+          return 2.2;
+        case 'aggressive':
+          return 2.4;
+        default:
+          return 2.2;
+      }
+    } else if (g.contains('gain')) {
+      switch (i) {
+        case 'mild':
+          return 1.8;
+        case 'moderate':
+          return 2.0;
+        case 'aggressive':
+          return 2.2;
+        default:
+          return 2.0;
+      }
+    }
+    return 1.8; // maintenance
+  }
+
+  /// Fat percentage based on goal + intensity
+  static double _getFatPercent(String goal, String intensity) {
+    final g = goal.toLowerCase();
+    final i = intensity.toLowerCase();
+
+    if (g.contains('loss') || g.contains('lose')) {
+      switch (i) {
+        case 'mild':
+          return 0.30;
+        case 'moderate':
+          return 0.27;
+        case 'aggressive':
+          return 0.24;
+        default:
+          return 0.28;
+      }
+    } else if (g.contains('gain')) {
+      switch (i) {
+        case 'mild':
+          return 0.27;
+        case 'moderate':
+          return 0.25;
+        case 'aggressive':
+          return 0.22;
+        default:
+          return 0.25;
+      }
+    }
+    return 0.27; // maintenance
+  }
+
+  /// Calculate estimated days given current and target weight
+  static int estimateDaysWithTarget({
+    required double currentKg,
+    required double targetKg,
+    required String goal,
+    required String intensity,
+  }) {
+    final diff = (currentKg - targetKg).abs();
+    if (diff < 0.5) return 7; // already close
+
+    double ratePerWeek;
+    switch (intensity.toLowerCase()) {
+      case 'mild':
+        ratePerWeek = 0.25;
+      case 'moderate':
+        ratePerWeek = 0.5;
+      case 'aggressive':
+        ratePerWeek = 0.75;
+      default:
+        ratePerWeek = 0.5;
+    }
+
+    final weeks = diff / ratePerWeek;
+    return (weeks * 7).round().clamp(7, 730);
   }
 }
 
@@ -122,6 +215,7 @@ class MacroResult {
   final int proteinGrams;
   final int carbGrams;
   final int fatGrams;
+  final int? estimatedDays;
 
   const MacroResult({
     required this.bmr,
@@ -132,5 +226,6 @@ class MacroResult {
     required this.proteinGrams,
     required this.carbGrams,
     required this.fatGrams,
+    this.estimatedDays,
   });
 }

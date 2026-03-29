@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../models/food.dart';
 import '../models/scaled_nutrition.dart';
 import 'ai_food_service.dart';
+import 'food_cache_service.dart';
 import 'input_parser.dart';
 import 'scaling_engine.dart';
 
@@ -38,8 +39,9 @@ class ResolvedFood {
 class FoodService {
   final FirebaseFirestore _firestore;
   final AiFoodService _aiService;
+  final FoodCacheService _cacheService;
 
-  static const String _usdaApiKey = '0qznubAbkFgohJaDwIp55QMPTNQDaX9jLKVeEtdn';
+  static const String _usdaApiKey = String.fromEnvironment('USDA_API_KEY');
   static const String _usdaBaseUrl =
       'https://api.nal.usda.gov/fdc/v1/foods/search';
 
@@ -49,9 +51,11 @@ class FoodService {
   FoodService({
     FirebaseFirestore? firestore,
     AiFoodService? aiService,
+    FoodCacheService? cacheService,
     this.onProgressUpdate,
-  })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _aiService = aiService ?? AiFoodService();
+  }) : _firestore = firestore ?? FirebaseFirestore.instance,
+       _aiService = aiService ?? AiFoodService(),
+       _cacheService = cacheService ?? FoodCacheService();
 
   // ─── Suggestion Engine (Typing Stage) ─────────────────────────────
 
@@ -67,6 +71,15 @@ class FoodService {
     final prefix = foodName.toLowerCase().trim();
 
     try {
+      // 1. Check local device cache first
+      final cachedFoods = await _cacheService.getTopFoods(prefix, limit: 5);
+      if (cachedFoods.isNotEmpty && cachedFoods.length >= 5) {
+        return cachedFoods;
+      }
+
+      // 2. Fallback to Firestore for remaining quota
+      final Set<String> cachedIds = cachedFoods.map((f) => f.id).toSet();
+
       final verifiedSnap = await _firestore
           .collection('verified_foods')
           .where('name_lowercase', isGreaterThanOrEqualTo: prefix)
@@ -76,22 +89,25 @@ class FoodService {
 
       final verifiedFoods = verifiedSnap.docs
           .map((doc) => Food.fromFirestore(doc.data(), doc.id))
+          .where((f) => !cachedIds.contains(f.id))
           .toList();
 
-      if (verifiedFoods.length >= 5) return verifiedFoods;
+      final combined = [...cachedFoods, ...verifiedFoods];
+      if (combined.length >= 5) return combined.take(5).toList();
 
       final unverifiedSnap = await _firestore
           .collection('unverified_foods')
           .where('name_lowercase', isGreaterThanOrEqualTo: prefix)
           .where('name_lowercase', isLessThan: '$prefix\uf8ff')
-          .limit(5 - verifiedFoods.length)
+          .limit(5 - combined.length)
           .get();
 
       final unverifiedFoods = unverifiedSnap.docs
           .map((doc) => Food.fromFirestore(doc.data(), doc.id))
+          .where((f) => !cachedIds.contains(f.id))
           .toList();
 
-      return [...verifiedFoods, ...unverifiedFoods];
+      return [...combined, ...unverifiedFoods].take(5).toList();
     } catch (e) {
       return [];
     }
@@ -104,8 +120,10 @@ class FoodService {
   /// 1. Parse raw input into structured format
   /// 2. Exact Firestore match on `name_lowercase`
   /// 3. USDA fallback (with re-check guard)
-  /// 4. Scale nutrition to requested quantity
-  Future<ResolvedFood?> resolveFood(String rawInput) async {
+  /// 4. AI refinement: pass DB/USDA reference to AI for validation
+  /// 5. If no reference found, full AI generation
+  /// 6. Scale nutrition to requested quantity
+  Future<ResolvedFood?> resolveFood(String rawInput, {String? location}) async {
     final parsed = InputParser.parse(rawInput);
     if (parsed.foodName.isEmpty) return null;
 
@@ -113,6 +131,40 @@ class FoodService {
     onProgressUpdate?.call('Searching database...');
     final firestoreFood = await _findExact(parsed.foodName);
     if (firestoreFood != null) {
+      // Pass DB reference to AI for validation/refinement
+      onProgressUpdate?.call('Verifying accuracy...');
+      final refined = await _aiService.refineWithReference(
+        userTypedName: parsed.foodName,
+        referenceFood: firestoreFood,
+        referenceSource: 'firestore',
+        location: location,
+      );
+
+      if (refined != null && !refined.referenceAccepted) {
+        // AI modified the food — store the AI version as unverified
+        final storedFood = await _storeDeterministic(refined.food);
+        _appendAliasToFood(storedFood, parsed.foodName);
+
+        final nutrition = ScalingEngine.scale(
+          storedFood.nutritionPer100g,
+          quantity: parsed.quantity,
+          unit: _resolveUnit(parsed.unit, storedFood),
+          defaultServingGrams: storedFood.defaultServingGrams,
+        );
+
+        await _cacheService.incrementFood(storedFood);
+
+        return ResolvedFood(
+          food: storedFood,
+          nutrition: nutrition,
+          source: 'ai',
+          userTypedName: parsed.foodName,
+          thoughtProcess: refined.thoughtProcess,
+          sources: refined.sources,
+        );
+      }
+
+      // Reference accepted — use DB food as-is (verified)
       _appendAliasToFood(firestoreFood, parsed.foodName);
 
       final nutrition = ScalingEngine.scale(
@@ -121,11 +173,17 @@ class FoodService {
         unit: _resolveUnit(parsed.unit, firestoreFood),
         defaultServingGrams: firestoreFood.defaultServingGrams,
       );
+
+      // Update local cache
+      await _cacheService.incrementFood(firestoreFood);
+
       return ResolvedFood(
         food: firestoreFood,
         nutrition: nutrition,
         source: 'firestore',
         userTypedName: parsed.foodName,
+        thoughtProcess: refined?.thoughtProcess,
+        sources: refined?.sources,
       );
     }
 
@@ -133,6 +191,40 @@ class FoodService {
     onProgressUpdate?.call('Searching database...');
     final usdaFood = await _searchAndStoreUSDA(parsed.foodName);
     if (usdaFood != null) {
+      // Pass USDA reference to AI for validation/refinement
+      onProgressUpdate?.call('Verifying accuracy...');
+      final refined = await _aiService.refineWithReference(
+        userTypedName: parsed.foodName,
+        referenceFood: usdaFood,
+        referenceSource: 'usda',
+        location: location,
+      );
+
+      if (refined != null && !refined.referenceAccepted) {
+        // AI modified the food — store the AI version as unverified
+        final storedFood = await _storeDeterministic(refined.food);
+        _appendAliasToFood(storedFood, parsed.foodName);
+
+        final nutrition = ScalingEngine.scale(
+          storedFood.nutritionPer100g,
+          quantity: parsed.quantity,
+          unit: _resolveUnit(parsed.unit, storedFood),
+          defaultServingGrams: storedFood.defaultServingGrams,
+        );
+
+        await _cacheService.incrementFood(storedFood);
+
+        return ResolvedFood(
+          food: storedFood,
+          nutrition: nutrition,
+          source: 'ai',
+          userTypedName: parsed.foodName,
+          thoughtProcess: refined.thoughtProcess,
+          sources: refined.sources,
+        );
+      }
+
+      // Reference accepted — use USDA food as-is (verified)
       _appendAliasToFood(usdaFood, parsed.foodName);
 
       final nutrition = ScalingEngine.scale(
@@ -141,17 +233,26 @@ class FoodService {
         unit: _resolveUnit(parsed.unit, usdaFood),
         defaultServingGrams: usdaFood.defaultServingGrams,
       );
+
+      // Update local cache
+      await _cacheService.incrementFood(usdaFood);
+
       return ResolvedFood(
         food: usdaFood,
         nutrition: nutrition,
         source: 'usda',
         userTypedName: parsed.foodName,
+        thoughtProcess: refined?.thoughtProcess,
+        sources: refined?.sources,
       );
     }
 
-    // Step 3: AI fallback with web search
+    // Step 3: AI fallback with web search (no reference available)
     onProgressUpdate?.call('Searching the web...');
-    final aiResult = await _aiService.generateFood(parsed.foodName);
+    final aiResult = await _aiService.generateFood(
+      parsed.foodName,
+      location: location,
+    );
     if (aiResult != null) {
       // Race condition guard: re-check Firestore before writing
       final existing = await _findExact(aiResult.food.nameLowercase);
@@ -164,6 +265,9 @@ class FoodService {
           unit: _resolveUnit(parsed.unit, existing),
           defaultServingGrams: existing.defaultServingGrams,
         );
+
+        await _cacheService.incrementFood(existing);
+
         return ResolvedFood(
           food: existing,
           nutrition: nutrition,
@@ -181,6 +285,9 @@ class FoodService {
         unit: _resolveUnit(parsed.unit, storedFood),
         defaultServingGrams: storedFood.defaultServingGrams,
       );
+
+      await _cacheService.incrementFood(storedFood);
+
       return ResolvedFood(
         food: storedFood,
         nutrition: nutrition,
@@ -194,6 +301,50 @@ class FoodService {
     return null;
   }
 
+  // ─── Recalculation ────────────────────────────────────────────────
+
+  /// Re-runs the AI pipeline for an existing food, forcing a fresh estimation.
+  /// The result is stored as unverified with moderate confidence.
+  Future<ResolvedFood?> recalculateFood(
+    Food oldFood, {
+    String? location,
+    double quantity = 100,
+    String unit = 'g',
+  }) async {
+    onProgressUpdate?.call('Re-evaluating food...');
+    final aiResult = await _aiService.generateFood(
+      oldFood.name,
+      location: location,
+      isRecalculation: true,
+    );
+    if (aiResult == null) return null;
+
+    // Force moderate confidence and mark as recalculated
+    final recalcFood = aiResult.food.copyWith(
+      credibilityScore: 0.5,
+      hasBeenRecalculated: true,
+      source: 'ai',
+    );
+
+    final storedFood = await _storeDeterministic(recalcFood);
+
+    final nutrition = ScalingEngine.scale(
+      storedFood.nutritionPer100g,
+      quantity: quantity,
+      unit: _resolveUnit(unit, storedFood),
+      defaultServingGrams: storedFood.defaultServingGrams,
+    );
+
+    return ResolvedFood(
+      food: storedFood,
+      nutrition: nutrition,
+      source: 'ai',
+      userTypedName: oldFood.name,
+      thoughtProcess: aiResult.thoughtProcess,
+      sources: aiResult.sources,
+    );
+  }
+
   // ─── Firestore Exact Match ────────────────────────────────────────
 
   Future<Food?> _findExact(String foodName) async {
@@ -201,24 +352,28 @@ class FoodService {
     if (cleanName.isEmpty) return null;
 
     try {
-      // Check verified collection first
-      final verifiedSnap = await _firestore
-          .collection('verified_foods')
-          .where('name_lowercase', isEqualTo: cleanName)
-          .limit(1)
-          .get();
+      // Fire both collection queries concurrently
+      final results = await Future.wait([
+        _firestore
+            .collection('verified_foods')
+            .where('name_lowercase', isEqualTo: cleanName)
+            .limit(1)
+            .get(),
+        _firestore
+            .collection('unverified_foods')
+            .where('name_lowercase', isEqualTo: cleanName)
+            .limit(1)
+            .get(),
+      ]);
 
+      final verifiedSnap = results[0];
+      final unverifiedSnap = results[1];
+
+      // Prefer verified over unverified
       if (verifiedSnap.docs.isNotEmpty) {
         final doc = verifiedSnap.docs.first;
         return Food.fromFirestore(doc.data(), doc.id);
       }
-
-      // Check unverified collection next
-      final unverifiedSnap = await _firestore
-          .collection('unverified_foods')
-          .where('name_lowercase', isEqualTo: cleanName)
-          .limit(1)
-          .get();
 
       if (unverifiedSnap.docs.isNotEmpty) {
         final doc = unverifiedSnap.docs.first;
@@ -234,13 +389,16 @@ class FoodService {
   // ─── USDA Search + Store ──────────────────────────────────────────
 
   Future<Food?> _searchAndStoreUSDA(String foodName) async {
+    if (_usdaApiKey.isEmpty) return null; // No API key configured
     try {
-      final uri = Uri.parse(_usdaBaseUrl).replace(queryParameters: {
-        'api_key': _usdaApiKey,
-        'query': foodName,
-        'pageSize': '5',
-        'dataType': 'Foundation,SR Legacy',
-      });
+      final uri = Uri.parse(_usdaBaseUrl).replace(
+        queryParameters: {
+          'api_key': _usdaApiKey,
+          'query': foodName,
+          'pageSize': '5',
+          'dataType': 'Foundation,SR Legacy',
+        },
+      );
 
       final response = await http.get(uri);
       if (response.statusCode != 200) {
@@ -363,10 +521,12 @@ class FoodService {
     // Reverse check: count description tokens that are neither in the query
     // nor in the modifier allowlist — these are genuine "extra food words"
     final extraFoodTokens = descTokens
-        .where((t) =>
-            t.length > 1 &&
-            !queryTokens.contains(t) &&
-            !_usdaModifiers.contains(t))
+        .where(
+          (t) =>
+              t.length > 1 &&
+              !queryTokens.contains(t) &&
+              !_usdaModifiers.contains(t),
+        )
         .toSet();
 
     if (extraFoodTokens.isEmpty) return _RelevanceResult.match;
@@ -379,8 +539,9 @@ class FoodService {
   /// food description matches the user's intended food.
   Future<bool> _aiCompareFood(String userQuery, String usdaDescription) async {
     try {
-      final callable = FirebaseFunctions.instance
-          .httpsCallable('aiCompareFood');
+      final callable = FirebaseFunctions.instance.httpsCallable(
+        'aiCompareFood',
+      );
       final result = await callable.call<Map<String, dynamic>>({
         'userQuery': userQuery.trim(),
         'usdaDescription': usdaDescription.trim(),
@@ -428,9 +589,11 @@ class FoodService {
   Future<Food> _storeDeterministic(Food food) async {
     // Deterministic doc ID: replace spaces/special chars for a clean path
     final docId = food.nameLowercase.replaceAll(RegExp(r'[^a-z0-9]'), '_');
-    
+
     // Choose collection based on source
-    final collectionName = food.source == 'ai' ? 'unverified_foods' : 'verified_foods';
+    final collectionName = food.source == 'ai'
+        ? 'unverified_foods'
+        : 'verified_foods';
     final docRef = _firestore.collection(collectionName).doc(docId);
 
     await docRef.set(food.toFirestore(), SetOptions(merge: true));
@@ -455,24 +618,34 @@ class FoodService {
   // ─── Aliasing System ──────────────────────────────────────────────
 
   /// Atomically appends a user-typed alias to a canonical food document.
-  Future<void> _appendAliasToFood(Food canonicalFood, String userTypedName) async {
+  Future<void> _appendAliasToFood(
+    Food canonicalFood,
+    String userTypedName,
+  ) async {
     if (canonicalFood.id.isEmpty) return;
 
-    final normalized = userTypedName.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
-    
-    if (normalized.isEmpty || 
+    final normalized = userTypedName
+        .trim()
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .toLowerCase();
+
+    if (normalized.isEmpty ||
         normalized == canonicalFood.nameLowercase ||
         canonicalFood.searchKeywords.contains(normalized) ||
         canonicalFood.aliases.contains(normalized)) {
-      return; 
+      return;
     }
 
     try {
-      final collectionName = canonicalFood.source == 'ai' ? 'unverified_foods' : 'verified_foods';
-      final docRef = _firestore.collection(collectionName).doc(canonicalFood.id);
-      
+      final collectionName = canonicalFood.source == 'ai'
+          ? 'unverified_foods'
+          : 'verified_foods';
+      final docRef = _firestore
+          .collection(collectionName)
+          .doc(canonicalFood.id);
+
       await docRef.update({
-        'aliases': FieldValue.arrayUnion([normalized])
+        'aliases': FieldValue.arrayUnion([normalized]),
       });
     } catch (e) {
       // Silent fail for aliases

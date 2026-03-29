@@ -1,9 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../screens/onboarding/onboarding_login_screen.dart';
 import 'measurements_sheet.dart';
 import 'progress_sheet.dart';
-import 'macro_goals_sheet.dart';
+
+// ─── Design tokens (shared with food_detail_sheet) ────────────────────────────
+const _kBg = Color(0xFFF8FAFC);
+const _kBorder = Color(0xFFEEF2F7);
+const _kTextPrimary = Color(0xFF0D1117);
+const _kTextSecondary = Color(0xFF64748B);
+const _kTextTertiary = Color(0xFFB0BAC6);
+const _kDivider = Color(0xFFF1F5F9);
+const _kHandle = Color(0xFFDDE3ED);
+const _kGreen = Color(0xFF22C55E);
 
 class AccountSheet extends StatelessWidget {
   const AccountSheet({super.key});
@@ -18,7 +28,8 @@ class AccountSheet extends StatelessWidget {
     );
   }
 
-  void _openSheet(BuildContext context, Future<void> Function(BuildContext) showSheet) async {
+  void _openSheet(
+      BuildContext context, Future<void> Function(BuildContext) showSheet) async {
     final nav = Navigator.of(context);
     nav.pop();
     await Future.delayed(const Duration(milliseconds: 150));
@@ -30,15 +41,22 @@ class AccountSheet extends StatelessWidget {
     }
   }
 
+  String _greeting() {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Good morning';
+    if (h < 17) return 'Good afternoon';
+    return 'Good evening';
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     final name = user?.displayName ?? 'User';
-    final email = user?.email ?? '';
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : 'U';
 
     return Container(
       decoration: const BoxDecoration(
-        color: Color(0xFFF6F7F9),
+        color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
         boxShadow: [
           BoxShadow(
@@ -48,141 +66,127 @@ class AccountSheet extends StatelessWidget {
           ),
         ],
       ),
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Handle bar
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFFCBD5E1),
-                borderRadius: BorderRadius.circular(999),
+          // ── Handle ──
+          Padding(
+            padding: const EdgeInsets.only(top: 14),
+            child: Center(
+              child: Container(
+                width: 40,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: _kHandle,
+                  borderRadius: BorderRadius.circular(999),
+                ),
               ),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
 
-          // Account info card (tappable → opens account details)
-          GestureDetector(
-            onTap: () => _openSheet(context, _showAccountDetails),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFF1F5F9)),
-              ),
+          // ── Profile header ──
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: GestureDetector(
+              onTap: () => _openSheet(context, _showAccountDetails),
+              behavior: HitTestBehavior.opaque,
               child: Row(
                 children: [
+                  // Avatar
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF0F172A), Color(0xFF334155)],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      initial,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          name,
+                          _greeting(),
                           style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF0F172A),
-                            letterSpacing: -0.3,
+                            color: _kTextTertiary,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.1,
                           ),
                         ),
-                        if (email.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            email,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFF94A3B8),
-                            ),
+                        const SizedBox(height: 2),
+                        Text(
+                          name,
+                          style: const TextStyle(
+                            color: _kTextPrimary,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.7,
+                            height: 1.15,
                           ),
-                        ],
+                        ),
                       ],
                     ),
                   ),
-                  const Icon(
-                    Icons.chevron_right,
-                    size: 20,
-                    color: Color(0xFF94A3B8),
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: _kBg,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: _kBorder, width: 1),
+                    ),
+                    child: const Icon(
+                      Icons.chevron_right_rounded,
+                      size: 18,
+                      color: _kTextTertiary,
+                    ),
                   ),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 20),
 
-          // Features card
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFF1F5F9)),
-            ),
-            child: Column(
-              children: [
-                _buildMenuRow(
-                  Icons.straighten,
-                  'Measurements',
-                  onTap: () => _openSheet(context, MeasurementsSheet.show),
-                ),
-                const Divider(height: 1, indent: 52, color: Color(0xFFF1F5F9)),
-                _buildMenuRow(
-                  Icons.track_changes_rounded,
-                  'Macro Goals',
-                  onTap: () => _openSheet(context, MacroGoalsSheet.show),
-                ),
-                const Divider(height: 1, indent: 52, color: Color(0xFFF1F5F9)),
-                _buildMenuRow(
-                  Icons.show_chart,
-                  'Progress',
-                  onTap: () => _openSheet(context, ProgressSheet.show),
-                ),
-              ],
-            ),
+          // ── Divider ──
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Container(height: 1, color: _kDivider),
           ),
-        ],
-      ),
-    );
-  }
+          const SizedBox(height: 8),
 
-  Widget _buildMenuRow(IconData icon, String title, {VoidCallback? onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          children: [
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, size: 16, color: const Color(0xFF64748B)),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF0F172A),
-                  letterSpacing: -0.2,
-                ),
-              ),
-            ),
-            const Icon(Icons.chevron_right, size: 18, color: Color(0xFFCBD5E1)),
-          ],
-        ),
+          // ── Menu items ──
+          _MenuTile(
+            icon: Icons.straighten_rounded,
+            label: 'Measurements',
+            subtitle: 'Weight, height & more',
+            onTap: () => _openSheet(context, MeasurementsSheet.show),
+          ),
+          _MenuTile(
+            icon: Icons.show_chart_rounded,
+            label: 'Progress',
+            subtitle: 'Streaks & activity',
+            onTap: () => _openSheet(context, ProgressSheet.show),
+          ),
+
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 20),
+        ],
       ),
     );
   }
@@ -198,7 +202,104 @@ class AccountSheet extends StatelessWidget {
   }
 }
 
-/// Separate sheet for account details with logout
+// ── Menu Tile ──────────────────────────────────────────────────────────────
+
+class _MenuTile extends StatefulWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _MenuTile({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  State<_MenuTile> createState() => _MenuTileState();
+}
+
+class _MenuTileState extends State<_MenuTile> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        HapticFeedback.selectionClick();
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _pressed = false),
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: _pressed ? _kBg : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: _pressed ? const Color(0xFFEEF2F7) : _kBg,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: _kBorder, width: 1),
+              ),
+              child: Icon(
+                widget.icon,
+                size: 18,
+                color: _kTextSecondary,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.label,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: _kTextPrimary,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  Text(
+                    widget.subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: _kTextTertiary,
+                      letterSpacing: 0.1,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: Color(0xFFD1D9E0),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Account Details Sub-sheet ──────────────────────────────────────────────
+
 class _AccountDetailsSheet extends StatelessWidget {
   const _AccountDetailsSheet();
 
@@ -208,155 +309,204 @@ class _AccountDetailsSheet extends StatelessWidget {
     final name = user?.displayName ?? 'User';
     final email = user?.email ?? '';
     final createdAt = user?.metadata.creationTime;
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : 'U';
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     return Container(
       decoration: const BoxDecoration(
-        color: Color(0xFFF6F7F9),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         boxShadow: [
           BoxShadow(
-            color: Color(0x26000000),
-            blurRadius: 40,
+            color: Color(0x1A000000),
+            blurRadius: 48,
             offset: Offset(0, -8),
           ),
         ],
       ),
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Handle bar
-          Center(
+          // Handle
+          Padding(
+            padding: const EdgeInsets.only(top: 14),
+            child: Center(
+              child: Container(
+                width: 40,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: _kHandle,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Header
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              children: [
+                const Text(
+                  'Account',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: _kTextPrimary,
+                    letterSpacing: -0.6,
+                  ),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  behavior: HitTestBehavior.opaque,
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: _kBg,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: _kBorder, width: 1),
+                    ),
+                    child: const Icon(
+                      Icons.close_rounded,
+                      size: 16,
+                      color: _kTextSecondary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Avatar + name card
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Container(
-              width: 36,
-              height: 4,
+              padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFFCBD5E1),
-                borderRadius: BorderRadius.circular(999),
+                color: _kBg,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: _kBorder, width: 1),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    width: 60,
+                    height: 60,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF0F172A), Color(0xFF334155)],
+                      ),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      initial,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: _kTextPrimary,
+                      letterSpacing: -0.4,
+                    ),
+                  ),
+                  if (email.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      email,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: _kTextTertiary,
+                      ),
+                    ),
+                  ],
+                  if (createdAt != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFECFDF5),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Member since ${months[createdAt.month - 1]} ${createdAt.year}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: _kGreen,
+                          letterSpacing: -0.1,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),
           const SizedBox(height: 16),
 
-          // Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Account Details',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF0F172A),
-                  letterSpacing: -0.5,
-                ),
-              ),
-              GestureDetector(
-                onTap: () => Navigator.pop(context),
-                child: Container(
-                  width: 32,
-                  height: 32,
-                  decoration: const BoxDecoration(
-                    color: Color(0x99E2E8F0),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.close,
-                    size: 20,
-                    color: Color(0xFF64748B),
+          // Log out
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () async {
+                HapticFeedback.mediumImpact();
+                await FirebaseAuth.instance.signOut();
+                if (context.mounted) {
+                  Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(
+                      builder: (_) => const OnboardingLoginScreen(),
+                    ),
+                    (route) => false,
+                  );
+                }
+              },
+              child: Container(
+                height: 52,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFFFECDD3).withValues(alpha: 0.6),
                   ),
                 ),
+                alignment: Alignment.center,
+                child: const Text(
+                  'Log Out',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFFEF4444),
+                    letterSpacing: -0.2,
+                  ),
+                ),
               ),
-            ],
+            ),
           ),
-          const SizedBox(height: 20),
 
-          // Account info card
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFFF1F5F9)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _detailRow('Name', name),
-                if (email.isNotEmpty) ...[
-                  const Divider(height: 20, color: Color(0xFFF1F5F9)),
-                  _detailRow('Email', email),
-                ],
-                if (createdAt != null) ...[
-                  const Divider(height: 20, color: Color(0xFFF1F5F9)),
-                  _detailRow(
-                    'Member since',
-                    '${createdAt.day} ${const ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][createdAt.month - 1]} ${createdAt.year}',
-                  ),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Log out button
-          GestureDetector(
-            onTap: () async {
-              await FirebaseAuth.instance.signOut();
-              if (context.mounted) {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(
-                    builder: (context) => const OnboardingLoginScreen(),
-                  ),
-                  (route) => false,
-                );
-              }
-            },
-            child: Container(
-              height: 52,
-              decoration: BoxDecoration(
-                color: const Color(0xFFFFF1F2),
-                border: Border.all(color: const Color(0xFFFECDD3)),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              alignment: Alignment.center,
-              child: const Text(
-                'Log Out',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFFF43F5E),
-                ),
-              ),
-            ),
-          ),
+          SizedBox(height: MediaQuery.of(context).padding.bottom + 24),
         ],
       ),
-    );
-  }
-
-  Widget _detailRow(String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: Color(0xFF94A3B8),
-          ),
-        ),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: Color(0xFF0F172A),
-          ),
-        ),
-      ],
     );
   }
 }

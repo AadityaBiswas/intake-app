@@ -11,6 +11,7 @@ class FoodListItem extends StatefulWidget {
   final List<String>? sources;
   final DateTime? createdAt;
   final bool isNew;
+  final bool isRecalculating;
 
   const FoodListItem({
     super.key,
@@ -24,6 +25,7 @@ class FoodListItem extends StatefulWidget {
     this.sources,
     this.createdAt,
     this.isNew = false,
+    this.isRecalculating = false,
   });
 
   @override
@@ -90,6 +92,17 @@ class _FoodListItemState extends State<FoodListItem>
     }
   }
 
+  @override
+  void didUpdateWidget(FoodListItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Handle isNew arriving late (after Firestore optimistic stream update)
+    if (!oldWidget.isNew && widget.isNew && !_showAnimation) {
+      _showAnimation = true;
+      _controller.reset();
+      _controller.forward();
+    }
+  }
+
   void _onAnimComplete(AnimationStatus status) {
     if (status == AnimationStatus.completed && mounted) {
       setState(() => _showAnimation = false);
@@ -121,9 +134,40 @@ class _FoodListItemState extends State<FoodListItem>
               ),
             ),
           ),
-          _showAnimation ? _buildAnimatedCalories() : _buildNormalCalories(),
+          if (widget.isRecalculating)
+            _buildRecalculatingIndicator()
+          else if (_showAnimation)
+            _buildAnimatedCalories()
+          else
+            _buildNormalCalories(),
         ],
       ),
+    );
+  }
+
+  Widget _buildRecalculatingIndicator() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.5,
+            color: const Color(0xFF94A3B8),
+          ),
+        ),
+        const SizedBox(width: 6),
+        const Text(
+          'Recalculating...',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: Color(0xFF94A3B8),
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      ],
     );
   }
 
